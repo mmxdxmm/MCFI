@@ -18,8 +18,9 @@
 #include "config.h"
 
 #define LOG_TAG "MCFI"
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
-#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
+static int g_entry_log_level = 0;  // 解析配置后设置
+#define LOGI(...) do { if (g_entry_log_level > 0) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__); } while (0)
+#define LOGD(...) do { if (g_entry_log_level > 0) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__); } while (0)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 using zygisk::Api;
@@ -172,6 +173,7 @@ public:
         }
 
         McfiConfig cfg = McfiConfig::parse(cfg_text);
+        g_entry_log_level = cfg.log_level;  // 日志开关
         if (!cfg.enabled || !cfg.package_allowed(pkg)) {
             // 无关应用静默跳过（不打印，避免日志 I/O 噪音）
             if (companion_fd >= 0) close(companion_fd);

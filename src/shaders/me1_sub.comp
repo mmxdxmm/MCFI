@@ -1,0 +1,135 @@
+#version 450
+// ============================================================================
+// MCFI 运动估计 —— L1 细化（subgroup/warp 归约加速版）
+// ----------------------------------------------------------------------------
+// 与 me1_l2.comp 算法一致（±sr 细化 + GMV + 半像素子像素 + 全局运动覆盖），
+// 但把「一个线程算一个 8×8 block、内层循环 16 个采样点」改为
+// 「16 个 lane 协作一个 block、每 lane 负责一个采样点」：
+//   local_size = 16×1；lane 0..15 → block 内 4×4 采样点（步长2）。
+//   每个候选：lane 算自己那点的 |c-q|，subgroupAdd 归约得整块 SAD，
+//   所有 lane 拿到相同 SAD → 同步 mix 选优（无分支、无需 broadcast）。
+// 收益：内层 16 次 texture/ALU 折叠成 1 次归约，ALU 压力降为 1/16；
+//       跨厂商 subgroupSize 不同时，inactive lane 贡献 0，结果仍正确。
+// dispatch：每 workgroup 一个 block → (gw, gh, 1)（C++ 侧改 dispatch 维度）。
+// 扩展：GL_KHR_shader_subgroup_arithmetic（不支持时 C++ 回退 me1_l2.comp）。
+// push constant: uP0=(R,block,dsW,dsH)  uP1=(R2,0,gw2,gh2)  sr
+// ============================================================================
+#extension GL_KHR_shader_subgroup_basic : require
+#extension GL_KHR_shader_subgroup_arithmetic : require
+#extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
+
+layout(local_size_x = 16, local_size_y = 1) in;
+layout(set = 0, binding = 0) uniform sampler2D uPrev;
+layout(set = 0, binding = 1) uniform sampler2D uCur;
+layout(set = 0, binding = 2) uniform sampler2D uMVPrev;
+layout(set = 0, binding = 3, rgba8) uniform writeonly image2D uMV;
+layout(set = 0, binding = 4) uniform sampler2D uGMV;
+layout(set = 0, binding = 5) uniform sampler2D uMvL2;
+layout(push_constant) uniform PC {
+    ivec4 uP0;
+    ivec4 uP1;
+    int sr;
+} pc;
+
+void main() {
+    ivec2 g = ivec2(gl_WorkGroupID.xy);   // 每 workgroup 一个 block
+    int dsW = pc.uP0.z, dsH = pc.uP0.w, block = pc.uP0.y, R = pc.uP0.x;
+    int gw  = (dsW + block - 1) / block;
+    int gh  = (dsH + block - 1) / block;
+    if (g.x >= gw || g.y >= gh) return;
+
+    int R2  = pc.uP1.x;
+    int gw2 = pc.uP1.z, gh2 = pc.uP1.w;
+
+    vec2 dsSize = vec2(float(dsW), float(dsH));
+    vec2 base = (vec2(g * block) + vec2(0.5 * float(block))) / dsSize;
+
+    // 本 lane 负责的 block 内采样点（4×4 步长2，共16点）
+    int lane  = int(gl_SubgroupInvocationID);
+    bool valid = lane < 16;
+    int by = (lane >> 2) * 2;
+    int bx = (lane & 3) * 2;
+    vec2 pp = base + (vec2(float(bx), float(by)) + 0.5 - 0.5 * float(block)) / dsSize;
+    vec3 c = texture(uCur, pp).rgb;       // 每 lane 预取自己那一点
+
+    // ---- 融合中心：L2 粗场放大 ×2 与 L1 上一帧场 ----
+    vec2 gL2 = vec2(g) / 2.0;
+    vec4 l2 = texture(uMvL2, (gL2 + 0.5) / vec2(float(max(gw2,1)), float(max(gh2,1))));
+    vec2 centerFromL2 = (l2.xy * 2.0 - 1.0) * float(R2) * 2.0;
+    vec2 c1 = texture(uMVPrev, (vec2(g) + 0.5) / vec2(float(gw), float(gh))).xy;
+    vec2 centerFromL1 = (c1 * 2.0 - 1.0) * float(R);
+    vec2 center = mix(centerFromL1, centerFromL2, step(0.3, l2.z));
+
+    int sr = pc.sr;
+
+    // 零位移 SAD（subgroup 归约，fp16 算差）
+    float16_t d0 = valid ? (float16_t(abs(c.r - texture(uPrev, pp).r)) +
+                           float16_t(abs(c.g - texture(uPrev, pp).g)) +
+                           float16_t(abs(c.b - texture(uPrev, pp).b))) : float16_t(0.0);
+    float zeroSad = subgroupAdd(float(d0));
+
+    float bestSad = 1e30;
+    vec2 bestOff = center;
+    for (int dy = -sr; dy <= sr; dy++) {
+        for (int dx = -sr; dx <= sr; dx++) {
+            vec2 cp = clamp(center + vec2(float(dx), float(dy)), vec2(-float(R)), vec2(float(R)));
+            vec2 off = cp / dsSize;
+            vec3 q = texture(uPrev, pp - off).rgb;
+            float16_t d = valid ? (float16_t(abs(c.r - q.r)) + float16_t(abs(c.g - q.g)) + float16_t(abs(c.b - q.b))) : float16_t(0.0);
+            float sad = subgroupAdd(float(d));          // 所有 lane 拿到相同 sad
+            float better = step(sad, bestSad);  // 同步无分支选优
+            bestSad = mix(bestSad, sad, better);
+            bestOff = mix(bestOff, cp, better);
+        }
+    }
+
+    // GMV 候选
+    float sadGmv = 1e30;
+    vec4 gmvData = texture(uGMV, vec2(0.5));
+    if (gmvData.z > 0.05) {
+        vec2 gmvPix = (gmvData.xy * 2.0 - 1.0) * float(R);
+        vec2 cp = clamp(gmvPix, vec2(-float(R)), vec2(float(R)));
+        vec2 off = cp / dsSize;
+        vec3 q = texture(uPrev, pp - off).rgb;
+        float d = valid ? (abs(c.r - q.r) + abs(c.g - q.g) + abs(c.b - q.b)) : 0.0;
+        float sad = subgroupAdd(float(d));
+        sadGmv = sad;
+        float better = step(sad, bestSad);
+        bestSad = mix(bestSad, sad, better);
+        bestOff = mix(bestOff, cp, better);
+    }
+
+    // 半像素子像素（8 候选，同样归约）
+    vec2 sub[8];
+    sub[0] = bestOff + vec2( 0.5,  0.0); sub[1] = bestOff + vec2(-0.5,  0.0);
+    sub[2] = bestOff + vec2( 0.0,  0.5); sub[3] = bestOff + vec2( 0.0, -0.5);
+    sub[4] = bestOff + vec2( 0.5,  0.5); sub[5] = bestOff + vec2(-0.5,  0.5);
+    sub[6] = bestOff + vec2( 0.5, -0.5); sub[7] = bestOff + vec2(-0.5, -0.5);
+    for (int i = 0; i < 8; i++) {
+        vec2 cp = clamp(sub[i], vec2(-float(R)), vec2(float(R)));
+        vec2 off = cp / dsSize;
+        vec3 q = texture(uPrev, pp - off).rgb;
+        float d = valid ? (abs(c.r - q.r) + abs(c.g - q.g) + abs(c.b - q.b)) : 0.0;
+        float sad = subgroupAdd(float(d));
+        float better = step(sad, bestSad);
+        bestSad = mix(bestSad, sad, better);
+        bestOff = mix(bestOff, cp, better);
+    }
+
+    // 结果只由 lane 0 写（imageStore 重复写同点会竞争，仅 lane 0 写）
+    if (lane == 0) {
+        float vx = 0.5, vy = 0.5, conf = 0.25;
+        float ok = 1.0 - step(zeroSad * 0.70, bestSad);
+        vec2 vn = (bestOff + vec2(float(R))) / (2.0 * vec2(float(R)));
+        vx = mix(0.5, vn.x, ok);
+        vy = mix(0.5, vn.y, ok);
+        conf = mix(0.25, clamp(1.0 - bestSad / (float(block * block) * 0.375), 0.0, 1.0), ok);
+        float gm = (1.0 - step(0.35, conf)) * step(0.05, gmvData.z)
+                 * (1.0 - step(zeroSad * 1.05, sadGmv));
+        vec2 gvN = gmvData.xy * 2.0 - 1.0;
+        vx = mix(vx, (gvN.x + 1.0) * 0.5, gm);
+        vy = mix(vy, (gvN.y + 1.0) * 0.5, gm);
+        conf = mix(conf, min(conf + 0.15, 0.5), gm);
+        imageStore(uMV, g, vec4(vx, vy, conf, 1.0));
+    }
+}

@@ -1,0 +1,72 @@
+#version 450
+// ============================================================================
+// MCFI L2（1/8）粗搜索 —— fp16 半精度版
+// 与 me0_l2.comp 同逻辑；SAD 内层用 float16_t 双路累加（ALU 减半），
+// 双路分 bx 奇偶（无分支 mix），最后转 float 选优。
+// 需 VK_KHR_shader_float16_int8；不支持时 C++ 回退 me0_l2（fp32）。
+// push: uP0=(R2, block, dsW2, dsH2)
+// ============================================================================
+#extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
+
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(set = 0, binding = 0) uniform sampler2D uPrev;
+layout(set = 0, binding = 1) uniform sampler2D uCur;
+layout(set = 0, binding = 2) uniform sampler2D uMvPrev;
+layout(set = 0, binding = 3, rgba8) uniform writeonly image2D uMV;
+layout(push_constant) uniform PC { ivec4 uP0; } pc;
+
+void main() {
+    ivec2 g = ivec2(gl_GlobalInvocationID.xy);
+    int dsW2 = pc.uP0.z, dsH2 = pc.uP0.w, block = pc.uP0.y, R2 = pc.uP0.x;
+    int gw2 = (dsW2 + block - 1) / block;
+    int gh2 = (dsH2 + block - 1) / block;
+    if (g.x >= gw2 || g.y >= gh2) return;
+
+    vec2 dsSize = vec2(float(dsW2), float(dsH2));
+    vec2 base = (vec2(g * block) + vec2(0.5 * float(block))) / dsSize;
+    vec2 mvSize = vec2(float(gw2), float(gh2));
+
+    vec2 tm  = texture(uMvPrev, (vec2(g) + 0.5) / mvSize).xy;
+    vec2 spL = texture(uMvPrev, (vec2(max(g.x - 1, 0), g.y) + 0.5) / mvSize).xy;
+    vec2 spU = texture(uMvPrev, (vec2(g.x, max(g.y - 1, 0)) + 0.5) / mvSize).xy;
+    vec2 spR = texture(uMvPrev, (vec2(min(g.x + 1, gw2 - 1), max(g.y - 1, 0)) + 0.5) / mvSize).xy;
+
+    float jit = 1.0 / (2.0 * float(R2));
+    vec2 cand[9];
+    cand[0] = vec2(0.5);
+    cand[1] = tm;
+    cand[2] = spL; cand[3] = spU; cand[4] = spR;
+    cand[5] = tm + vec2( jit, 0.0); cand[6] = tm + vec2(-jit, 0.0);
+    cand[7] = tm + vec2(0.0,  jit); cand[8] = tm + vec2(0.0, -jit);
+
+    float bestSad = 1e30, zeroSad = 1e30;
+    vec2 bestOff = cand[0];
+    for (int k = 0; k < 9; k++) {
+        vec2 cp = clamp(cand[k], 0.0, 1.0);
+        vec2 off = (cp * 2.0 - 1.0) * float(R2) / dsSize;
+        float16_t sadA = float16_t(0.0), sadB = float16_t(0.0);
+        for (int by = 0; by < block; by += 2) {
+            for (int bx = 0; bx < block; bx += 2) {
+                vec2 pp = base + (vec2(float(bx), float(by)) + 0.5 - 0.5 * float(block)) / dsSize;
+                vec3 c = texture(uCur, pp).rgb;
+                vec3 q = texture(uPrev, pp - off).rgb;
+                float16_t d = float16_t(abs(c.r - q.r)) + float16_t(abs(c.g - q.g)) + float16_t(abs(c.b - q.b));
+                float sel = step(1.0, float(bx & 2));          // 无分支双路
+                sadA = float16_t(float(sadA) + float(d) * (1.0 - sel));
+                sadB = float16_t(float(sadB) + float(d) * sel);
+            }
+        }
+        float sad = float(sadA) + float(sadB);
+        zeroSad = (k == 0) ? sad : zeroSad;
+        float better = step(sad, bestSad);
+        bestSad = min(bestSad, sad);
+        bestOff = mix(bestOff, cp, better);
+    }
+
+    float vx = 0.5, vy = 0.5, conf = 0.25;
+    float ok = 1.0 - step(zeroSad * 0.70, bestSad);
+    vx = mix(0.5, bestOff.x, ok);
+    vy = mix(0.5, bestOff.y, ok);
+    conf = mix(0.25, clamp(1.0 - bestSad / (float(block * block) * 0.375), 0.0, 1.0), ok);
+    imageStore(uMV, g, vec4(vx, vy, conf, 1.0));
+}

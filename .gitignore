@@ -1,0 +1,7 @@
+/build/
+/out/
+*.o
+*.so
+mcfid
+src/shaders/*.spv
+.vscode/

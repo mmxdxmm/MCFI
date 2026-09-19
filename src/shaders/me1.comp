@@ -1,0 +1,116 @@
+#version 450
+// MCFI 运动估计 pass1 —— 3DRS 细化：以粗场为中心 ±1 整像素细化 + 半像素子像素细化，
+// 结果只写 mvB（writeonly storage image）。零位移 SAD 独立计算作可信度门限。
+// 与 GLES CS_ME1_SRC 同构；sr 由 push constant 控制（refine?2:0，sr=0 时直接转写粗场）
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(set = 0, binding = 0) uniform sampler2D uPrev;
+layout(set = 0, binding = 1) uniform sampler2D uCur;
+layout(set = 0, binding = 2) uniform sampler2D uMVPrev;
+layout(set = 0, binding = 3, rgba8) uniform writeonly image2D uMV;
+layout(set = 0, binding = 4) uniform sampler2D uGMV;   // 1×1 GMV（x,y=归一化 z=峰值占比）
+layout(push_constant) uniform PC { ivec4 uP0; int sr; } pc;
+void main() {
+    ivec2 g = ivec2(gl_GlobalInvocationID.xy);
+    int dsW = pc.uP0.z, dsH = pc.uP0.w, block = pc.uP0.y, R = pc.uP0.x;
+    int gw = (dsW + block - 1) / block;
+    int gh = (dsH + block - 1) / block;
+    if (g.x >= gw || g.y >= gh) return;
+    vec2 dsSize = vec2(float(dsW), float(dsH));
+    vec2 base = (vec2(g * block) + vec2(0.5 * float(block))) / dsSize;
+    vec2 c0 = texture(uMVPrev, (vec2(g) + 0.5) / vec2(float(gw), float(gh))).xy;
+    vec2 center = (c0 * 2.0 - 1.0) * float(R);
+    int sr = pc.sr;
+    // 零位移参考（可信度门限）
+    float zeroSad = 0.0;
+    for (int by = 0; by < block; by += 2) {
+        for (int bx = 0; bx < block; bx += 2) {
+            vec2 pp = base + (vec2(float(bx), float(by)) + 0.5 - 0.5 * float(block)) / dsSize;
+            vec3 c = texture(uCur, pp).rgb;
+            vec3 q = texture(uPrev, pp).rgb;
+            zeroSad += abs(c.r - q.r) + abs(c.g - q.g) + abs(c.b - q.b);
+        }
+    }
+    float bestSad = 1e30;
+    vec2 bestOff = center;
+    for (int dy = -sr; dy <= sr; dy++) {
+        for (int dx = -sr; dx <= sr; dx++) {
+            vec2 cp = clamp(center + vec2(float(dx), float(dy)), vec2(-float(R)), vec2(float(R)));
+            vec2 off = cp / dsSize;
+            float sad = 0.0;
+            for (int by = 0; by < block; by += 2) {
+                for (int bx = 0; bx < block; bx += 2) {
+                    vec2 pp = base + (vec2(float(bx), float(by)) + 0.5 - 0.5 * float(block)) / dsSize;
+                    vec3 c = texture(uCur, pp).rgb;
+                    vec3 q = texture(uPrev, pp - off).rgb;
+                    sad += abs(c.r - q.r) + abs(c.g - q.g) + abs(c.b - q.b);
+                }
+            }
+            float better = step(sad, bestSad);
+            bestSad = min(bestSad, sad);
+            bestOff = mix(bestOff, cp, better);
+        }
+    }
+    // GMV 候选：画面存在主导运动（相机运动）时强塞给平坦/低置信块。
+    // 记录 SAD_GMV 作为深度判定依据：GMV 能完美解释的块 = 远景（区域 A）。
+    float sadGmv = 1e30;
+    vec4 gmvData = texture(uGMV, vec2(0.5));
+    if (gmvData.z > 0.05) {
+        vec2 gmvPix = (gmvData.xy * 2.0 - 1.0) * float(R);
+        vec2 cp = clamp(gmvPix, vec2(-float(R)), vec2(float(R)));
+        vec2 off = cp / dsSize;
+        float sad = 0.0;
+        for (int by = 0; by < block; by += 2) {
+            for (int bx = 0; bx < block; bx += 2) {
+                vec2 pp = base + (vec2(float(bx), float(by)) + 0.5 - 0.5 * float(block)) / dsSize;
+                vec3 c = texture(uCur, pp).rgb;
+                vec3 q = texture(uPrev, pp - off).rgb;
+                sad += abs(c.r - q.r) + abs(c.g - q.g) + abs(c.b - q.b);
+            }
+        }
+        sadGmv = sad;
+            float better = step(sad, bestSad);
+            bestSad = min(bestSad, sad);
+            bestOff = mix(bestOff, cp, better);
+    }
+    // 半像素子像素细化（8 候选：4 轴向 + 4 对角）
+    vec2 sub[8];
+    sub[0] = bestOff + vec2( 0.5,  0.0);
+    sub[1] = bestOff + vec2(-0.5,  0.0);
+    sub[2] = bestOff + vec2( 0.0,  0.5);
+    sub[3] = bestOff + vec2( 0.0, -0.5);
+    sub[4] = bestOff + vec2( 0.5,  0.5);
+    sub[5] = bestOff + vec2(-0.5,  0.5);
+    sub[6] = bestOff + vec2( 0.5, -0.5);
+    sub[7] = bestOff + vec2(-0.5, -0.5);
+    for (int i = 0; i < 8; i++) {
+        vec2 cp = clamp(sub[i], vec2(-float(R)), vec2(float(R)));
+        vec2 off = cp / dsSize;
+        float sad = 0.0;
+        for (int by = 0; by < block; by += 2) {
+            for (int bx = 0; bx < block; bx += 2) {
+                vec2 pp = base + (vec2(float(bx), float(by)) + 0.5 - 0.5 * float(block)) / dsSize;
+                vec3 c = texture(uCur, pp).rgb;
+                vec3 q = texture(uPrev, pp - off).rgb;
+                sad += abs(c.r - q.r) + abs(c.g - q.g) + abs(c.b - q.b);
+            }
+        }
+            float better = step(sad, bestSad);
+            bestSad = min(bestSad, sad);
+            bestOff = mix(bestOff, cp, better);
+    }
+    float vx = 0.5, vy = 0.5, conf = 0.25;
+    float ok = 1.0 - step(zeroSad * 0.70, bestSad);
+    vec2 vn = (bestOff + vec2(float(R))) / (2.0 * vec2(float(R)));
+    vx = mix(0.5, vn.x, ok);
+    vy = mix(0.5, vn.y, ok);
+    conf = mix(0.25, clamp(1.0 - bestSad / (float(block * block) * 0.375), 0.0, 1.0), ok);
+    // 全局运动覆盖：平坦/低置信块若 GMV 匹配好（残差 ≤ 零位移误差），直接把运动矢量
+    // 替换为 GMV——远景跟随相机运动，消除平坦区矢量抖动。运动场内部完成，无区域分类。
+    float gm = (1.0 - step(0.35, conf)) * step(0.05, gmvData.z)
+             * (1.0 - step(zeroSad * 1.05, sadGmv));
+    vec2 gvN = gmvData.xy * 2.0 - 1.0;
+    vx = mix(vx, (gvN.x + 1.0) * 0.5, gm);
+    vy = mix(vy, (gvN.y + 1.0) * 0.5, gm);
+    conf = mix(conf, min(conf + 0.15, 0.5), gm);
+    imageStore(uMV, g, vec4(vx, vy, conf, 1.0));
+}

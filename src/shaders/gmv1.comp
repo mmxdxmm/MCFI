@@ -1,0 +1,25 @@
+#version 450
+// GMV 统计 pass1：直方图归约找峰值，写 1×1 GMV 图像。
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(set = 0, binding = 0, std430) buffer Hist { int bins[1024]; int total; } hist;
+layout(set = 0, binding = 1, rgba32f) uniform writeonly image2D uOut;
+layout(push_constant) uniform PC { ivec4 uP0; } pc;   // (binW, R, 0, 0)
+void main() {
+    if (gl_GlobalInvocationID.x != 0u) return;
+    int binW = pc.uP0.x, R = pc.uP0.y;
+    int best = 0; float bestC = -1.0;
+    int n = binW * binW;
+    int tot = hist.total > 0 ? hist.total : 1;
+    for (int i = 0; i < n; i++) {
+        float c = float(hist.bins[i]);
+        float oldC = bestC;
+        bestC = max(bestC, c);
+        best = (c > oldC) ? i : best;
+    }
+    int qx = best % binW, qy = best / binW;
+    vec2 disp = vec2(float(qx - R - 1), float(qy - R - 1));
+    vec2 gmv = disp / float(R) * 0.5 + 0.5;
+    float w = bestC / float(tot);
+    w *= step(0.20, w);
+    imageStore(uOut, ivec2(0, 0), vec4(gmv, w, 0.0));
+}

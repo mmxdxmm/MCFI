@@ -1,0 +1,62 @@
+#version 450
+#extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
+// MCFI 运动估计 pass0 —— 3D 递归搜索（3DRS）粗搜索
+// 候选集 = 零 / 时间预测（上一帧同块矢量）/ 空间预测（上一帧邻块近似）/ 更新预测（±抖动）
+// 时间预测保证运动场跨帧连续 → 中间帧稳定不闪；~9 候选 → GPU 开销为全搜索的 1/10。
+// 结果只写 mvA（writeonly storage image）——同一 storage image 绝不混合读写（该驱动混合读写崩溃）
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(set = 0, binding = 0) uniform sampler2D uPrev;
+layout(set = 0, binding = 1) uniform sampler2D uCur;
+layout(set = 0, binding = 2) uniform sampler2D uMvPrev;
+layout(set = 0, binding = 3, rgba8) uniform writeonly image2D uMV;
+layout(push_constant) uniform PC { ivec4 uP0; } pc;
+void main() {
+    ivec2 g = ivec2(gl_GlobalInvocationID.xy);
+    int dsW = pc.uP0.z, dsH = pc.uP0.w, block = pc.uP0.y, R = pc.uP0.x;
+    int gw = (dsW + block - 1) / block;
+    int gh = (dsH + block - 1) / block;
+    if (g.x >= gw || g.y >= gh) return;
+    vec2 dsSize = vec2(float(dsW), float(dsH));
+    vec2 base = (vec2(g * block) + vec2(0.5 * float(block))) / dsSize;
+    vec2 mvSize = vec2(float(gw), float(gh));
+    vec2 tm = texture(uMvPrev, (vec2(g) + 0.5) / mvSize).xy;
+    vec2 spL = texture(uMvPrev, (vec2(max(g.x - 1, 0), g.y) + 0.5) / mvSize).xy;
+    vec2 spU = texture(uMvPrev, (vec2(g.x, max(g.y - 1, 0)) + 0.5) / mvSize).xy;
+    vec2 spR = texture(uMvPrev, (vec2(min(g.x + 1, gw - 1), max(g.y - 1, 0)) + 0.5) / mvSize).xy;
+    float jit = 1.0 / (2.0 * float(R));
+    vec2 cand[9];
+    cand[0] = vec2(0.5);
+    cand[1] = tm;
+    cand[2] = spL; cand[3] = spU; cand[4] = spR;
+    cand[5] = tm + vec2( jit, 0.0);
+    cand[6] = tm + vec2(-jit, 0.0);
+    cand[7] = tm + vec2(0.0,  jit);
+    cand[8] = tm + vec2(0.0, -jit);
+    float bestSad = 1e30;
+    float zeroSad = 1e30;
+    vec2 bestOff = cand[0];
+    for (int k = 0; k < 9; k++) {
+        vec2 cp = clamp(cand[k], vec2(0.0), vec2(1.0));
+        vec2 off = (cp * 2.0 - 1.0) * float(R) / dsSize;
+        // 2 路 fp16 子累加 + fp32 合并（防大数累加精度丢失）
+        float16_t sadA = float16_t(0.0), sadB = float16_t(0.0);
+        for (int by = 0; by < block; by += 2) {
+            for (int bx = 0; bx < block; bx += 2) {
+                vec2 pp = base + (vec2(float(bx), float(by)) + 0.5 - 0.5 * float(block)) / dsSize;
+                vec3 c = texture(uCur, pp).rgb;
+                vec3 q = texture(uPrev, pp - off).rgb;
+                float16_t d = float16_t(abs(c.r - q.r)) + float16_t(abs(c.g - q.g)) + float16_t(abs(c.b - q.b));
+                if ((bx & 2) != 0) sadB += d; else sadA += d;
+            }
+        }
+        float sad = float(sadA) + float(sadB);
+        if (k == 0) zeroSad = sad;
+        if (sad < bestSad) { bestSad = sad; bestOff = cp; }
+    }
+    float vx = 0.5, vy = 0.5, conf = 0.25;
+    if (bestSad < zeroSad * 0.70) {
+        vx = bestOff.x; vy = bestOff.y;
+        conf = clamp(1.0 - bestSad / (float(block * block) * 0.375), 0.0, 1.0);
+    }
+    imageStore(uMV, g, vec4(vx, vy, conf, 1.0));
+}

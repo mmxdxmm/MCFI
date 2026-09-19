@@ -36,7 +36,7 @@ struct McfiConfig {
     int  gen_interval = 1;         // 每 N 个真实帧插入 1 个生成帧
     int  me_quality = 60;          // 运动估计质量/开销 0~100（决定搜索半径与细化级数）
     int  panel_port = 4400;        // 控制面板端口（被占用自动顺延）
-    int  log_level = 1;            // 0=关闭 1=普通
+    int  log_level = 0;            // 0=关闭（默认） 1=普通
     int  vk_mci = 0;               // Vulkan 运动补偿开关：0=仅普通混合（部分驱动在 MCI 资源创建时崩溃，默认关闭保稳定）1=开启 MCI
     int  pts_enable = 1;           // SurfaceFlinger 时间戳注入：1=让生成帧/真实帧各占一个 vsync（默认开）0=关闭
     int  vsync_hz = 0;             // 屏幕刷新率（Hz）：0=自动估计；填屏幕支持的最高刷新率（如120）

@@ -1855,14 +1855,14 @@ static void video_interp_sync(EGLDisplay dpy, EGLSurface surf, int w, int h) {
 
     restoreState(st);
 
-    // 4. 性能上限（同步耗时监控）：≥16ms 累计 3 次升一档。
+    // 4. 性能上限（同步耗时监控）：≥25ms 累计 10 次升一档（大幅放宽阈值，视频不易误触发）。
     //    刚 init/重建的帧跳过统计（初始化是资源开销不是插帧开销，切视频瞬间不误升档）。
     if (v->fresh) { v->fresh = false; v->perf_hits = 0; }
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - t0).count();
-    if (ms >= 16) {
+    if (ms >= 25) {
         v->perf_hits++;
-        if (v->perf_hits >= 3) {
+        if (v->perf_hits >= 10) {
             v->perf_hits = 0;
             if (v->perf_level < 3) {
                 v->perf_level++;

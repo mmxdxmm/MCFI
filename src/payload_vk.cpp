@@ -106,7 +106,7 @@ typedef struct mcfi_VkPresentTimesInfoGOOGLE {
 } mcfi_VkPresentTimesInfoGOOGLE;
 
 static bool g_vk_pts = false;                     // 设备已启用 VK_GOOGLE_display_timing
-static std::atomic<int64_t> g_vk_vsync_ns{8333333};
+static std::atomic<int64_t> g_vk_vsync_ns{16666667};  // 兜底 60Hz；配置 vsync_us>0 时用配置值
 static std::atomic<uint64_t> g_vk_gen_seq{0};     // worker 已 present 的生成帧计数
 static int64_t g_vk_last_real_ns = 0;
 
@@ -115,6 +115,8 @@ static int64_t mcfi_vk_now_ns() {
     return (int64_t)ts.tv_sec * 1000000000ll + ts.tv_nsec;
 }
 static void mcfi_vk_vsync_sample(int64_t now_ns) {
+    McfiConfig vkc; mcfi_get_config(&vkc);
+    if (vkc.vsync_hz > 0) { g_vk_vsync_ns.store(1000000000LL / vkc.vsync_hz); return; }
     if (g_vk_last_real_ns > 0) {
         int64_t d = now_ns - g_vk_last_real_ns;
         if (d >= 3000000 && d <= 20000000) {

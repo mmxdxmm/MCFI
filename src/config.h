@@ -39,6 +39,7 @@ struct McfiConfig {
     int  log_level = 1;            // 0=关闭 1=普通
     int  vk_mci = 0;               // Vulkan 运动补偿开关：0=仅普通混合（部分驱动在 MCI 资源创建时崩溃，默认关闭保稳定）1=开启 MCI
     int  pts_enable = 1;           // SurfaceFlinger 时间戳注入：1=让生成帧/真实帧各占一个 vsync（默认开）0=关闭
+    int  vsync_hz = 0;             // 屏幕刷新率（Hz）：0=自动估计；填屏幕支持的最高刷新率（如120）
 
     static inline std::string trim(const std::string &s) {
         size_t b = s.find_first_not_of(" \t\r\n");
@@ -145,6 +146,7 @@ public:
             else if (k == "log_level")     c.log_level = atoi(v.c_str());
             else if (k == "vk_mci")        c.vk_mci = atoi(v.c_str());
             else if (k == "pts_enable")    c.pts_enable = atoi(v.c_str());
+            else if (k == "vsync_hz")      c.vsync_hz = atoi(v.c_str());
         }
         if (c.strength < 0) c.strength = 0;
         if (c.strength > 100) c.strength = 100;
@@ -157,6 +159,7 @@ public:
         if (c.panel_port <= 0 || c.panel_port > 65535) c.panel_port = 4400;
         if (c.vk_mci < 0 || c.vk_mci > 1) c.vk_mci = 0;
         if (c.pts_enable < 0 || c.pts_enable > 1) c.pts_enable = 1;
+        if (c.vsync_hz < 0 || c.vsync_hz > 1000) c.vsync_hz = 0;
         return c;
     }
 
@@ -175,9 +178,10 @@ public:
                  "panel_port=%d\n"
                  "log_level=%d\n"
                  "vk_mci=%d\n"
-                 "pts_enable=%d\n",
+                 "pts_enable=%d\n"
+                 "vsync_hz=%d\n",
                  enabled ? 1 : 0, target_mode, targets.c_str(), interp_mode,
-                 strength, smooth, gen_interval, me_quality, panel_port, log_level, vk_mci, pts_enable);
+                 strength, smooth, gen_interval, me_quality, panel_port, log_level, vk_mci, pts_enable, vsync_hz);
         return buf;
     }
 };

@@ -63,7 +63,7 @@ static eglSwapBuffers_t orig_eglSwapBuffers = nullptr;
 // 扩展缺失或函数指针加载失败 → 静默退回原行为（不设时间戳）。
 typedef EGLBoolean (*PFNEGLPRESENTATIONTIMEANDROIDPROC)(EGLDisplay, EGLSurface, int64_t);
 static PFNEGLPRESENTATIONTIMEANDROIDPROC g_eglPts = nullptr;
-static std::atomic<int64_t> g_vsync_period_ns{8333333};   // 默认 120Hz=8.33ms，自适应
+static std::atomic<int64_t> g_vsync_period_ns{16666667};   // 兜底 60Hz=16.67ms；配置 vsync_us>0 时用配置值，否则自适应
 static int64_t g_last_real_swap_ns = 0;
 static bool g_pts_pending = false;   // 本 hook 调用是否已插入生成帧（需给真实帧设 +2 vsync）
 
@@ -71,8 +71,9 @@ static int64_t mcfi_now_ns() {
     timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
     return (int64_t)ts.tv_sec * 1000000000ll + ts.tv_nsec;
 }
-// 用相邻真实帧 swap 间隔平滑估计 vsync 周期（合理区间 3~20ms）
+// 用相邻真实帧 swap 间隔平滑估计 vsync 周期（合理区间 3~20ms）；配置 vsync_hz>0 时用配置值
 static void mcfi_vsync_sample(int64_t now_ns) {
+    if (g_cfg.vsync_hz > 0) { g_vsync_period_ns.store(1000000000LL / g_cfg.vsync_hz); return; }
     if (g_last_real_swap_ns > 0) {
         int64_t d = now_ns - g_last_real_swap_ns;
         if (d >= 3000000 && d <= 20000000) {
@@ -1294,12 +1295,13 @@ static bool async_init(AsyncCtx *a, EGLContext appCtx, int w, int h) {
         if (id == cfgId) { cfg = c; break; }
     }
     if (!cfg) {
-        // 兜底：app config 不在全局列表（视频播放器私有 config / no_config_context 等）。
-        // worker 线程纯 compute+FBO，不需要和 app 同像素格式，挑一个 RGBA8888 GLES3 config。
+        // 兜底：app config 不在全局列表（私有config/no_config_context等）。
+        // 按「支持ES3 + 颜色位深最大」选 config（另一个版本验证过的回退策略）。
         EGLint fallbackAttr[] = {
             EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
-            EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
-            EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8,
+            EGL_RED_SIZE, EGL_DONT_CARE, EGL_GREEN_SIZE, EGL_DONT_CARE,
+            EGL_BLUE_SIZE, EGL_DONT_CARE, EGL_ALPHA_SIZE, EGL_DONT_CARE,
+            EGL_DEPTH_SIZE, EGL_DONT_CARE,
             EGL_NONE
         };
         EGLint fn = 0;
@@ -1308,7 +1310,7 @@ static bool async_init(AsyncCtx *a, EGLContext appCtx, int w, int h) {
             std::vector<EGLConfig> fc((size_t)fn);
             eglChooseConfig(a->dpy, fallbackAttr, fc.data(), fn, &fn);
             cfg = fc[0];
-            LOGI("未匹配到 app EGLConfig，使用兜底 GLES3 config（%d 个候选）", (int)fn);
+            LOGI("未匹配到 app EGLConfig，按 ES3 回退（%d 候选）", (int)fn);
         }
     }
     if (!cfg) { LOGE("找不到匹配 EGLConfig"); return false; }
@@ -1571,6 +1573,9 @@ static void async_game_path(EGLDisplay dpy, EGLSurface surf, int w, int h) {
             if (fresh) {
                 GLState stt;
                 saveState(stt);
+                // 跨 context 内存屏障：worker context 画完 genTex 后，主线程 context 读前
+                // 必须确保纹理内容对本 context 可见（否则读到未定义/黑色内容 → 黑闪）
+                glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT);
                 // 画生成帧 -> 默认帧缓冲，先行呈现（时间戳注入：A.5 上屏于下一个 vsync）
                 glBindFramebuffer(GL_FRAMEBUFFER, 0);
                 glViewport(0, 0, w, h);

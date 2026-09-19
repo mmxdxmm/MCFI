@@ -136,6 +136,13 @@
 
 <div class="card">
   <div class="row">
+    <div><label>屏幕刷新率（Hz）</label><div class="hint">填屏幕支持的最高刷新率（如120），不是游戏帧率也不是插帧后帧率。0=自动估计。设置→显示→屏幕刷新率可查。</div></div>
+    <input type="number" id="vsync_hz" value="0" style="width:90px">
+  </div>
+</div>
+
+<div class="card">
+  <div class="row">
     <div><label>调试日志</label><div class="hint">logcat 过滤 MCFI 查看</div></div>
     <div class="switch"><input type="checkbox" id="log_level" checked><span class="slider-t" onclick="document.getElementById('log_level').click()"></span></div>
   </div>
@@ -191,6 +198,7 @@ function render(cfg) {
   $('log_level').checked = (kv.log_level ?? '1') !== '0';
   $('vk_mci').checked = (kv.vk_mci ?? '0') === '1';
   $('pts_enable').checked = (kv.pts_enable ?? '1') !== '0';
+  $('vsync_hz').value = kv.vsync_hz ?? '0';
 }
 
 function collect() {
@@ -208,6 +216,7 @@ function collect() {
     'log_level=' + ($('log_level').checked ? 1 : 0),
     'vk_mci=' + ($('vk_mci').checked ? 1 : 0),
     'pts_enable=' + ($('pts_enable').checked ? 1 : 0),
+    'vsync_hz=' + $('vsync_hz').value,
   ];
   return lines.join('\n') + '\n';
 }

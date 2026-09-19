@@ -1,4 +1,4 @@
-# MCFI 补帧模块 v2.0.0（运动补偿插帧 · Zygisk · arm64-v8a）
+# MCFI 补帧模块 v2.5.4（运动补偿插帧 · Zygisk · arm64-v8a）
 
 基于 Zygisk 的**运动补偿插帧（MCI）**模块，**同时支持 OpenGL ES 3.2+ 与 Vulkan 1.1+ 渲染的游戏与视频**。
 在相邻两个真实帧之间用 GPU 做块匹配运动估计，按运动矢量合成中间帧并插入呈现，画面连贯流畅、拖影显著低于普通混合。
@@ -14,7 +14,7 @@
 
 1. 确认 Magisk 已启用 **Zygisk**（Magisk App → 设置 → Zygisk 开关），设备为 arm64-v8a；
    KernelSU / APatch 环境请配合 **Zygisk Next** 使用（本模块只使用标准 Zygisk API 与 root companion，可兼容）。
-2. 刷入 `MCFI-补帧模块-v2.0.0-arm64.zip`，重启。
+2. 刷入 `MCFI-补帧模块-v2.5.4-arm64.zip`，重启。
 
 ## 二、控制面板
 

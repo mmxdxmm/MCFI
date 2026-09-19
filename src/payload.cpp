@@ -83,10 +83,16 @@ static void mcfi_vsync_sample(int64_t now_ns) {
     }
     g_last_real_swap_ns = now_ns;
 }
-// 把 surface 的期望上屏时间设为 now + k 个 vsync 周期
+// 把 surface 的期望上屏时间设为对齐到 vsync 边界的时间
+// k=1: 下一个 vsync 上屏（生成帧）
+// k=2: 下下个 vsync 上屏（真实帧）
 static void mcfi_set_pts(EGLDisplay dpy, EGLSurface surf, int k) {
-    if (!g_eglPts || !g_cfg.pts_enable) return;
-    g_eglPts(dpy, surf, mcfi_now_ns() + (int64_t)k * g_vsync_period_ns.load());
+    if (!g_eglPts || !g_cfg.gles_pts_enable) return;
+    int64_t period = g_vsync_period_ns.load();
+    int64_t now = mcfi_now_ns();
+    // 对齐到下一个 vsync 边界（向上取整）
+    int64_t next_vsync = ((now + period - 1) / period) * period;
+    g_eglPts(dpy, surf, next_vsync + (k - 1) * period);
 }
 // 真实帧上屏：若本帧插入了生成帧，则把真实帧期望上屏时间设为 +2 vsync，并采样周期
 static inline EGLBoolean mcfi_swap_real(EGLDisplay dpy, EGLSurface surf) {
@@ -1573,9 +1579,6 @@ static void async_game_path(EGLDisplay dpy, EGLSurface surf, int w, int h) {
             if (fresh) {
                 GLState stt;
                 saveState(stt);
-                // 跨 context 内存屏障：worker context 画完 genTex 后，主线程 context 读前
-                // 必须确保纹理内容对本 context 可见（否则读到未定义/黑色内容 → 黑闪）
-                glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT);
                 // 画生成帧 -> 默认帧缓冲，先行呈现（时间戳注入：A.5 上屏于下一个 vsync）
                 glBindFramebuffer(GL_FRAMEBUFFER, 0);
                 glViewport(0, 0, w, h);
@@ -1744,7 +1747,7 @@ static VideoCtx *video_acquire(EGLContext ctx, int w, int h) {
 // 视频同步插帧（hook 内、app 上下文 current 时调用）：
 // 当前帧 → curTex；有 prev 时同步做多尺度 3DRS+合成 → 先呈现中间帧（orig swap）再恢复真实帧；
 // 交换 prev/cur 槽。性能上限：同步耗时 ≥16ms 累计 3 次 → 升档（1 减候选 / 2 隔帧 / 3 熔断）。
-static void video_interp_sync(EGLDisplay dpy, EGLSurface surf, int w, int h) {
+static void video_interp_sync(EGLDisplay dpy, EGLSurface surf, int w, int h, bool is_video) {
     EGLContext ctx = eglGetCurrentContext();
     if (ctx == EGL_NO_CONTEXT) return;
 
@@ -1777,9 +1780,10 @@ static void video_interp_sync(EGLDisplay dpy, EGLSurface surf, int w, int h) {
     static bool g_video_reported = false;
     if (!g_video_reported) {
         g_video_reported = true;
-        mcfi_send_event("%s(pid=%d): MCFI 视频补帧管线生效 %dx%d [GLES 同步 多尺度3DRS %s %s]",
-                        g_pkg.c_str(), getpid(), w, h,
-                        mcfi_algo_name(v->meOk ? cfg.interp_mode : 1),
+        int eff_mode = is_video ? cfg.video_interp_mode : cfg.interp_mode;
+        mcfi_send_event("%s(pid=%d): MCFI %s补帧管线生效 %dx%d [GLES 同步 多尺度3DRS %s %s]",
+                        g_pkg.c_str(), getpid(), is_video ? "视频" : "游戏", w, h,
+                        mcfi_algo_name(v->meOk ? eff_mode : 1),
                         v->meOk ? (gles_mediump_fp16() ? "fp16" : "fp32(mediump模拟)") : "普通混合");
     }
 
@@ -1812,7 +1816,7 @@ static void video_interp_sync(EGLDisplay dpy, EGLSurface surf, int w, int h) {
 
     // 2. 有上一帧时同步插帧
     if (v->hasPrev) {
-        int imode = cfg.interp_mode;
+        int imode = is_video ? cfg.video_interp_mode : cfg.interp_mode;  // 视频/游戏分别选算法
         if (v->meOk) {
             GLuint mvOut = run_motion_estimation(v->progME, v->progCopy, v->vao,
                                                  v->prevTex, v->curTex,
@@ -1932,13 +1936,10 @@ static EGLBoolean my_eglSwapBuffers(EGLDisplay dpy, EGLSurface surf) {
                     // 视频模式：跳过过小 surface（弹幕/小窗/浮层），只对主画面插帧
                     if (w < 500) return orig_eglSwapBuffers(dpy, surf);
                     // 视频模式独立同步计算（内联呈现中间帧后恢复真实帧，外层再呈现真实帧）
-                    video_interp_sync(dpy, surf, w, h);
+                    video_interp_sync(dpy, surf, w, h, true);
                     return mcfi_swap_real(dpy, surf);
                 }
-                // 游戏模式异步流水线：
-                //   app 线程只拷贝真实帧 + 非阻塞呈现生成帧（零 GPU 重活）；
-                //   运动估计/中间帧合成全部在 worker 线程（共享 EGL 上下文），
-                //   渲染线程帧率不再被插帧拖累，GPU 不足时 worker 自然降速（显示真实帧，不卡顿）。
+                // 游戏模式异步流水线：app 线程只拷帧 + 呈现生成帧，运动估计在 worker 线程
                 async_game_path(dpy, surf, w, h);
             }
         }

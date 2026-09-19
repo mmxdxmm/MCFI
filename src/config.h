@@ -30,7 +30,8 @@ struct McfiConfig {
     bool enabled = false;          // 总开关
     int  target_mode = 1;          // 0=全部应用 1=白名单 2=黑名单
     std::string targets;           // 逗号分隔包名，可带 =gles/=vulkan/=video/=off
-    int  interp_mode = 0;          // 0=运动补偿插帧(MCI，推荐) 1=普通混合(兼容) 2=运动自适应混合
+    int  interp_mode = 0;          // 游戏模式：0=运动补偿插帧(MCI，推荐) 1=普通混合(兼容) 2=运动自适应混合
+    int  video_interp_mode = 1;    // 视频模式：0=MCI 1=普通混合(默认，稳定) 2=运动自适应混合
     int  strength = 60;            // MCI 遮挡/拖影抑制强度 0~100
     int  smooth = 60;             // 平滑强度 0~100（合成端静止保护 + 运动估计端时域收缩）
     int  gen_interval = 1;         // 每 N 个真实帧插入 1 个生成帧
@@ -38,7 +39,8 @@ struct McfiConfig {
     int  panel_port = 4400;        // 控制面板端口（被占用自动顺延）
     int  log_level = 0;            // 0=关闭（默认） 1=普通
     int  vk_mci = 0;               // Vulkan 运动补偿开关：0=仅普通混合（部分驱动在 MCI 资源创建时崩溃，默认关闭保稳定）1=开启 MCI
-    int  pts_enable = 1;           // SurfaceFlinger 时间戳注入：1=让生成帧/真实帧各占一个 vsync（默认开）0=关闭
+    int  gles_pts_enable = 0;      // GLES 时间戳注入：1=开 0=关（默认关，部分设备会导致插帧失效）
+    int  vk_pts_enable = 1;        // Vulkan 时间戳注入：1=开（默认开）0=关
     int  vsync_hz = 0;             // 屏幕刷新率（Hz）：0=自动估计；填屏幕支持的最高刷新率（如120）
 
     static inline std::string trim(const std::string &s) {
@@ -141,11 +143,12 @@ public:
             else if (k == "strength")      c.strength = atoi(v.c_str());
             else if (k == "smooth")        c.smooth = atoi(v.c_str());
             else if (k == "gen_interval")  c.gen_interval = atoi(v.c_str());
-            else if (k == "me_quality")    c.me_quality = atoi(v.c_str());
+            else if (k == "video_interp_mode") c.video_interp_mode = atoi(v.c_str());
             else if (k == "panel_port")    c.panel_port = atoi(v.c_str());
             else if (k == "log_level")     c.log_level = atoi(v.c_str());
             else if (k == "vk_mci")        c.vk_mci = atoi(v.c_str());
-            else if (k == "pts_enable")    c.pts_enable = atoi(v.c_str());
+            else if (k == "gles_pts_enable") c.gles_pts_enable = atoi(v.c_str());
+            else if (k == "vk_pts_enable")   c.vk_pts_enable = atoi(v.c_str());
             else if (k == "vsync_hz")      c.vsync_hz = atoi(v.c_str());
         }
         if (c.strength < 0) c.strength = 0;
@@ -156,9 +159,11 @@ public:
         if (c.me_quality < 0) c.me_quality = 0;
         if (c.me_quality > 100) c.me_quality = 100;
         if (c.interp_mode < 0 || c.interp_mode > 2) c.interp_mode = 0;
+        if (c.video_interp_mode < 0 || c.video_interp_mode > 2) c.video_interp_mode = 1;
         if (c.panel_port <= 0 || c.panel_port > 65535) c.panel_port = 4400;
         if (c.vk_mci < 0 || c.vk_mci > 1) c.vk_mci = 0;
-        if (c.pts_enable < 0 || c.pts_enable > 1) c.pts_enable = 1;
+        if (c.gles_pts_enable < 0 || c.gles_pts_enable > 1) c.gles_pts_enable = 0;
+        if (c.vk_pts_enable < 0 || c.vk_pts_enable > 1) c.vk_pts_enable = 1;
         if (c.vsync_hz < 0 || c.vsync_hz > 1000) c.vsync_hz = 0;
         return c;
     }
@@ -178,10 +183,12 @@ public:
                  "panel_port=%d\n"
                  "log_level=%d\n"
                  "vk_mci=%d\n"
-                 "pts_enable=%d\n"
-                 "vsync_hz=%d\n",
+                 "gles_pts_enable=%d\n"
+                 "vk_pts_enable=%d\n"
+                 "vsync_hz=%d\n"
+                 "video_interp_mode=%d\n",
                  enabled ? 1 : 0, target_mode, targets.c_str(), interp_mode,
-                 strength, smooth, gen_interval, me_quality, panel_port, log_level, vk_mci, pts_enable, vsync_hz);
+                 strength, smooth, gen_interval, me_quality, panel_port, log_level, vk_mci, gles_pts_enable, vk_pts_enable, vsync_hz, video_interp_mode);
         return buf;
     }
 };

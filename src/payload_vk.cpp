@@ -1727,7 +1727,7 @@ static void process_pending_frame(PendingFrame &pf, const McfiConfig &cfg) {
             // 时间戳注入：生成帧 A.5 期望上屏于 +1 vsync
             mcfi_VkPresentTimesInfoGOOGLE pts{};
             mcfi_VkPresentTimeGOOGLE pt{};
-            if (g_vk_pts && cfg.pts_enable) {
+            if (g_vk_pts && cfg.vk_pts_enable) {
                 pt.presentID = 0;
                 pt.desiredPresentTime = mcfi_vk_now_ns() + g_vk_vsync_ns.load();
                 pts.sType = (VkStructureType)MCFI_PRESENT_TIMES_INFO_GOOGLE;
@@ -1887,7 +1887,7 @@ static VkResult VKAPI_CALL my_QueuePresentKHR(VkQueue queue, const VkPresentInfo
     // 与生成帧 A.5(+1 vsync) 各占一个完整周期；否则原样呈现。
     VkResult r;
     McfiConfig vkcfg; mcfi_get_config(&vkcfg);
-    if (g_vk_pts && vkcfg.pts_enable) {
+    if (g_vk_pts && vkcfg.vk_pts_enable) {
         static uint64_t s_last_gen = 0;
         uint64_t gen = g_vk_gen_seq.load();
         if (gen != s_last_gen) {

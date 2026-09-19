@@ -83,12 +83,22 @@
 </div>
 
 <div class="card">
-  <label>插帧算法</label>
+  <label>插帧算法（游戏）</label>
   <select id="interp_mode">
     <option value="0">运动补偿插帧 MCI（推荐：块匹配运动估计 + 双向 warp，拖影最少）</option>
     <option value="1">普通混合（兼容模式，开销最低）</option>
     <option value="2">运动自适应混合（按亮度差偏向真实帧）</option>
   </select>
+  <div class="row" style="border:0">
+    <div class="flexrow" style="display:block;width:100%">
+      <div class="flexrow"><label>插帧算法（视频）</label><div class="hint">视频/直播模式独立算法，默认普通混合（噪声/滚动弹幕下最稳）</div></div>
+      <select id="video_interp_mode" style="width:100%;margin-top:6px;">
+        <option value="1" selected>普通混合（默认：视频噪声/直播下最稳，开销最低）</option>
+        <option value="0">运动补偿插帧 MCI（块匹配运动估计，拖影最少）</option>
+        <option value="2">运动自适应混合（按亮度差偏向真实帧）</option>
+      </select>
+    </div>
+  </div>
   <div class="row" style="border:0">
     <div class="flexrow" style="display:block;width:100%">
       <div class="flexrow"><label>运动估计质量</label><span class="val" id="me_val">60%</span></div>
@@ -189,6 +199,7 @@ function render(cfg) {
   $('target_mode').value = kv.target_mode ?? '1';
   $('targets').value = kv.targets ?? '';
   $('interp_mode').value = kv.interp_mode ?? '0';
+  $('video_interp_mode').value = kv.video_interp_mode ?? '1';
   $('strength').value = kv.strength ?? 60;
   $('strength_val').textContent = ($('strength').value) + '%';
   $('smooth').value = kv.smooth ?? 60;
@@ -210,6 +221,7 @@ function collect() {
     'target_mode=' + $('target_mode').value,
     'targets=' + $('targets').value.replace(/\s+/g, ''),
     'interp_mode=' + $('interp_mode').value,
+    'video_interp_mode=' + $('video_interp_mode').value,
     'strength=' + $('strength').value,
     'smooth=' + $('smooth').value,
     'gen_interval=' + $('gen_interval').value,

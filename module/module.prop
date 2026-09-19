@@ -1,6 +1,6 @@
 id=mcfi
 name=MCFI 补帧模块
-version=v2.6.9
-versionCode=269
+version=v2.6.10
+versionCode=270
 author=MCFI Team
-description=v2.6.9：视频模式性能自适应阈值放宽——单帧耗时 ≥25ms 且累计 10 次才升档（原 ≥16ms×3，短时卡顿不再误降画质）；v2.6.8：调试日志默认关闭。
+description=v2.6.10：视频模式独立插帧算法选择（video_interp_mode，默认普通混合，与游戏算法解耦）；v2.6.9：视频性能自适应阈值放宽（≥25ms×10 次升档）。

@@ -31,6 +31,7 @@ struct McfiConfig {
     int  target_mode = 1;          // 0=全部应用 1=白名单 2=黑名单
     std::string targets;           // 逗号分隔包名，可带 =gles/=vulkan/=video/=off
     int  interp_mode = 0;          // 0=运动补偿插帧(MCI，推荐) 1=普通混合(兼容) 2=运动自适应混合
+    int  video_interp_mode = 1;    // 视频模式插帧算法（独立于游戏）：0=MCI 1=普通混合（默认，视频噪声/直播下最稳）2=运动自适应混合
     int  strength = 60;            // MCI 遮挡/拖影抑制强度 0~100
     int  smooth = 60;             // 平滑强度 0~100（合成端静止保护 + 运动估计端时域收缩）
     int  gen_interval = 1;         // 每 N 个真实帧插入 1 个生成帧
@@ -139,6 +140,7 @@ public:
             else if (k == "target_mode")   c.target_mode = atoi(v.c_str());
             else if (k == "targets")       c.targets = v;
             else if (k == "interp_mode")   c.interp_mode = atoi(v.c_str());
+            else if (k == "video_interp_mode") c.video_interp_mode = atoi(v.c_str());
             else if (k == "strength")      c.strength = atoi(v.c_str());
             else if (k == "smooth")        c.smooth = atoi(v.c_str());
             else if (k == "gen_interval")  c.gen_interval = atoi(v.c_str());
@@ -158,6 +160,7 @@ public:
         if (c.me_quality < 0) c.me_quality = 0;
         if (c.me_quality > 100) c.me_quality = 100;
         if (c.interp_mode < 0 || c.interp_mode > 2) c.interp_mode = 0;
+        if (c.video_interp_mode < 0 || c.video_interp_mode > 2) c.video_interp_mode = 1;
         if (c.panel_port <= 0 || c.panel_port > 65535) c.panel_port = 4400;
         if (c.vk_mci < 0 || c.vk_mci > 1) c.vk_mci = 0;
         if (c.pts_enable < 0 || c.pts_enable > 1) c.pts_enable = 1;
@@ -174,6 +177,7 @@ public:
                  "target_mode=%d\n"
                  "targets=%s\n"
                  "interp_mode=%d\n"
+                 "video_interp_mode=%d\n"
                  "strength=%d\n"
                  "smooth=%d\n"
                  "gen_interval=%d\n"
@@ -184,7 +188,7 @@ public:
                  "pts_enable=%d\n"
                  "me_mv16=%d\n"
                  "vsync_hz=%d\n",
-                 enabled ? 1 : 0, target_mode, targets.c_str(), interp_mode,
+                 enabled ? 1 : 0, target_mode, targets.c_str(), interp_mode, video_interp_mode,
                  strength, smooth, gen_interval, me_quality, panel_port, log_level, vk_mci, pts_enable, me_mv16, vsync_hz);
         return buf;
     }

@@ -1972,7 +1972,7 @@ static void video_interp_sync(EGLDisplay dpy, EGLSurface surf, int w, int h) {
         g_video_reported = true;
         mcfi_send_event("%s(pid=%d): MCFI 视频补帧管线生效 %dx%d [GLES 同步 多尺度3DRS %s %s]",
                         g_pkg.c_str(), getpid(), w, h,
-                        mcfi_algo_name(v->meOk ? cfg.interp_mode : 1),
+                        mcfi_algo_name(v->meOk ? cfg.video_interp_mode : 1),
                         v->meOk ? (gles_mediump_fp16() ? "fp16" : "fp32(mediump模拟)") : "普通混合");
     }
 
@@ -2005,7 +2005,8 @@ static void video_interp_sync(EGLDisplay dpy, EGLSurface surf, int w, int h) {
 
     // 2. 有上一帧时同步插帧
     if (v->hasPrev) {
-        int imode = cfg.interp_mode;
+        // 视频模式算法独立配置（video_interp_mode，默认普通混合）
+        int imode = cfg.video_interp_mode;
         if (v->meOk) {
             GLuint mvOut = run_motion_estimation(v->progME, v->progCopy, v->vao,
                                                  v->prevTex, v->curTex,
@@ -2103,10 +2104,12 @@ static EGLBoolean my_eglSwapBuffers(EGLDisplay dpy, EGLSurface surf) {
                     {
                         std::lock_guard<std::mutex> lk2(g_cfg_mtx);
                         if (nc.enabled != g_cfg.enabled || nc.interp_mode != g_cfg.interp_mode ||
+                            nc.video_interp_mode != g_cfg.video_interp_mode ||
                             nc.strength != g_cfg.strength || nc.gen_interval != g_cfg.gen_interval ||
                             nc.me_quality != g_cfg.me_quality) {
-                            LOGI("配置热更新: enabled=%d 算法=%s strength=%d interval=%d me=%d",
+                            LOGI("配置热更新: enabled=%d 算法=%s 视频算法=%s strength=%d interval=%d me=%d",
                                  nc.enabled, mcfi_algo_name(nc.interp_mode),
+                                 mcfi_algo_name(nc.video_interp_mode),
                                  nc.strength, nc.gen_interval, nc.me_quality);
                         }
                         g_cfg = nc;

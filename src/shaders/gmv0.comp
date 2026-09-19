@@ -1,0 +1,19 @@
+#version 450
+// GMV 统计 pass0：L1 场 mvB 直方图（原子累加）。与 GLES CS_GMV0_SRC 同构。
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(set = 0, binding = 0) uniform sampler2D uMV;   // L1 场（mvB，尺寸 mvW1×mvH1）
+layout(set = 0, binding = 1, std430) buffer Hist { int bins[1024]; int total; } hist;
+layout(push_constant) uniform PC { ivec4 uP0; } pc;   // (R, mvW, mvH, binW)
+void main() {
+    ivec2 g = ivec2(gl_GlobalInvocationID.xy);
+    if (g.x >= pc.uP0.y || g.y >= pc.uP0.z) return;
+    vec2 mv = texture(uMV, (vec2(g) + 0.5) / vec2(float(pc.uP0.y), float(pc.uP0.z))).xy;
+    vec2 disp = (mv * 2.0 - 1.0) * float(pc.uP0.x);
+    int binW = pc.uP0.w;
+    int qx = int(round(disp.x)) + pc.uP0.x + 1;
+    int qy = int(round(disp.y)) + pc.uP0.x + 1;
+    qx = clamp(qx, 0, binW - 1);
+    qy = clamp(qy, 0, binW - 1);
+    atomicAdd(hist.bins[qy * binW + qx], 1);
+    atomicAdd(hist.total, 1);
+}

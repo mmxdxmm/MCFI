@@ -1293,6 +1293,24 @@ static bool async_init(AsyncCtx *a, EGLContext appCtx, int w, int h) {
         eglGetConfigAttrib(a->dpy, c, EGL_CONFIG_ID, &id);
         if (id == cfgId) { cfg = c; break; }
     }
+    if (!cfg) {
+        // 兜底：app config 不在全局列表（视频播放器私有 config / no_config_context 等）。
+        // worker 线程纯 compute+FBO，不需要和 app 同像素格式，挑一个 RGBA8888 GLES3 config。
+        EGLint fallbackAttr[] = {
+            EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
+            EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+            EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8,
+            EGL_NONE
+        };
+        EGLint fn = 0;
+        eglChooseConfig(a->dpy, fallbackAttr, nullptr, 0, &fn);
+        if (fn > 0) {
+            std::vector<EGLConfig> fc((size_t)fn);
+            eglChooseConfig(a->dpy, fallbackAttr, fc.data(), fn, &fn);
+            cfg = fc[0];
+            LOGI("未匹配到 app EGLConfig，使用兜底 GLES3 config（%d 个候选）", (int)fn);
+        }
+    }
     if (!cfg) { LOGE("找不到匹配 EGLConfig"); return false; }
     a->cfg = cfg;
 

@@ -394,7 +394,7 @@ int main() {
     // 打开 daemon.log（追加），此后 LOGI/LOGE 同时写 logcat 和该文件
     g_logf = fopen(MCFI_DAEMON_LOG, "ab");
     if (g_logf) { chmod(MCFI_DAEMON_LOG, 0644); setvbuf(g_logf, nullptr, _IOLBF, 0); }
-    LOGI("======== MCFI 守护进程启动 v2.6.8 ========");
+    LOGI("======== MCFI 守护进程启动 v2.6.9 ========");
     load_config();
     int port = McfiConfig::parse(g_config_text).panel_port;
 

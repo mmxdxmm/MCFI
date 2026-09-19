@@ -28,11 +28,13 @@
 
 // 文件日志：同时写 logcat 和 daemon.log（带时间戳），解决旧版 daemon.log 恒为空的问题
 static FILE *g_logf = nullptr;
+static int g_daemon_log = 0;   // 调试日志开关（默认关，load_config 后按配置更新；0=logcat 只留 ERROR）
 
 static void mcfi_fprintln(int prio, const char *fmt, va_list ap) {
-    // 1) logcat
-    __android_log_vprint(prio, LOG_TAG, fmt, ap);
-    // 2) 文件
+    // 1) logcat：INFO 受调试日志开关控制（关闭后 logcat 不再刷 MCFID），ERROR 始终打
+    if (!(prio == ANDROID_LOG_INFO && g_daemon_log <= 0))
+        __android_log_vprint(prio, LOG_TAG, fmt, ap);
+    // 2) 文件（daemon.log 始终写，供排障）
     if (!g_logf) return;
     time_t t = time(nullptr);
     struct tm tm;
@@ -118,6 +120,7 @@ static void load_config() {
         if (f) { fputs(s.c_str(), f); fclose(f); chmod(MCFI_CONFIG, 0664); }
     }
     g_config_text = s;
+    g_daemon_log = McfiConfig::parse(s).log_level;   // 调试日志开关跟随配置
     // 镜像一份到 app 侧可能可读的位置（兜底通道）
     FILE *m = fopen(MCFI_CONFIG_MIRROR, "wb");
     if (m) { fputs(s.c_str(), m); fclose(m); chmod(MCFI_CONFIG_MIRROR, 0644); }
@@ -134,6 +137,7 @@ static void save_config(const std::string &text) {
     chmod(tmp.c_str(), 0664);
     rename(tmp.c_str(), MCFI_CONFIG);
     g_config_text = text;
+    g_daemon_log = McfiConfig::parse(text).log_level;   // 面板保存后立即生效
     FILE *m = fopen(MCFI_CONFIG_MIRROR, "wb");
     if (m) { fwrite(text.data(), 1, text.size(), m); fclose(m); chmod(MCFI_CONFIG_MIRROR, 0644); }
     LOGI("配置已保存 (%zu 字节)", text.size());
@@ -390,7 +394,7 @@ int main() {
     // 打开 daemon.log（追加），此后 LOGI/LOGE 同时写 logcat 和该文件
     g_logf = fopen(MCFI_DAEMON_LOG, "ab");
     if (g_logf) { chmod(MCFI_DAEMON_LOG, 0644); setvbuf(g_logf, nullptr, _IOLBF, 0); }
-    LOGI("======== MCFI 守护进程启动 v2.6.6 ========");
+    LOGI("======== MCFI 守护进程启动 v2.6.8 ========");
     load_config();
     int port = McfiConfig::parse(g_config_text).panel_port;
 

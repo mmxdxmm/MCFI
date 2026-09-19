@@ -144,8 +144,8 @@
 
 <div class="card">
   <div class="row">
-    <div><label>调试日志</label><div class="hint">logcat 过滤 MCFI 查看</div></div>
-    <div class="switch"><input type="checkbox" id="log_level" checked><span class="slider-t" onclick="document.getElementById('log_level').click()"></span></div>
+    <div><label>调试日志</label><div class="hint">关闭后 logcat 的 MCFI/MCFID 只保留 ERROR（启动/命中/降级等 INFO 不再输出，daemon.log 文件照常记录）</div></div>
+    <div class="switch"><input type="checkbox" id="log_level"><span class="slider-t" onclick="document.getElementById('log_level').click()"></span></div>
   </div>
 </div>
 
@@ -197,7 +197,7 @@ function render(cfg) {
   $('me_val').textContent = ($('me_quality').value) + '%';
   $('me_mv16').checked = (kv.me_mv16 ?? '0') === '1';
   $('gen_interval').value = kv.gen_interval ?? '1';
-  $('log_level').checked = (kv.log_level ?? '1') !== '0';
+  $('log_level').checked = (kv.log_level ?? '0') === '1';
   $('vk_mci').checked = (kv.vk_mci ?? '0') === '1';
   $('pts_enable').checked = (kv.pts_enable ?? '1') !== '0';
   $('vsync_hz').value = kv.vsync_hz ?? '0';

@@ -1,6 +1,6 @@
 id=mcfi
 name=MCFI 补帧模块
-version=v2.6.6
-versionCode=266
+version=v2.6.8
+versionCode=268
 author=MCFI Team
-description=v2.6.6：vsync 周期可配置（vsync_hz，60/90/144Hz 设备不再因硬编码 120Hz 时间戳设错黑屏）；GLES 主线程跨 context 读 genTex 前补 glMemoryBarrier 消除黑闪；面板补刷新率输入。v2.6.5：面板 MV16 开关；v2.6.4：MV16 绑定格式联动修复。
+description=v2.6.8：调试日志默认关闭（log_level=0，新装/恢复默认即静默，logcat 仅保留 ERROR）；v2.6.7：调试日志开关全链路生效（daemon/zygisk 入口/载荷统一受控）。v2.6.6：vsync_hz 可配置；GLES 跨 context 读 genTex 前补 glMemoryBarrier 消除黑闪；面板补刷新率输入。

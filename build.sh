@@ -26,7 +26,7 @@ cp "$ROOT/module/"module.prop "$ROOT/module/"*.sh "$ROOT/module/config.conf" "$M
 cp "$ROOT/README.md" "$MODULE/README.md" 2>/dev/null || true
 
 cd "$OUT/module"
-ZIPNAME="MCFI-补帧模块-v2.5.14-arm64.zip"
+ZIPNAME="MCFI-补帧模块-v2.5.15-arm64.zip"
 rm -f "../$ZIPNAME"
 zip -q -r -9 "../$ZIPNAME" .
 echo ""

@@ -28,8 +28,11 @@
 
 // 文件日志：同时写 logcat 和 daemon.log（带时间戳），解决旧版 daemon.log 恒为空的问题
 static FILE *g_logf = nullptr;
+static int g_daemon_log_level = 1;  // 0=只输出错误，1=输出info
 
 static void mcfi_fprintln(int prio, const char *fmt, va_list ap) {
+    // LOGI 受 log_level 控制；LOGE 始终输出
+    if (prio == ANDROID_LOG_INFO && g_daemon_log_level == 0) return;
     // 1) logcat
     __android_log_vprint(prio, LOG_TAG, fmt, ap);
     // 2) 文件
@@ -118,6 +121,11 @@ static void load_config() {
         if (f) { fputs(s.c_str(), f); fclose(f); chmod(MCFI_CONFIG, 0664); }
     }
     g_config_text = s;
+    // 解析 log_level 控制守护进程日志输出
+    {
+        McfiConfig tmp = McfiConfig::parse(s);
+        g_daemon_log_level = tmp.log_level;
+    }
     // 镜像一份到 app 侧可能可读的位置（兜底通道）
     FILE *m = fopen(MCFI_CONFIG_MIRROR, "wb");
     if (m) { fputs(s.c_str(), m); fclose(m); chmod(MCFI_CONFIG_MIRROR, 0644); }

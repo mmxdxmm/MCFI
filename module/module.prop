@@ -1,6 +1,6 @@
 id=mcfi
 name=MCFI 补帧模块
-version=v2.5.14
-versionCode=265
+version=v2.5.15
+versionCode=266
 author=MCFI Team
 description=v2.5.2：修正 subgroup 探测为查 core supportedOperations（Adreno 无 KHR 扩展名也能识别）；视频L2=1/8、L2多尺度、subgroup+fp16、帧时间戳对齐。

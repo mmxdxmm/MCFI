@@ -1,4 +1,4 @@
-# MCFI 补帧模块 v2.5.4（运动补偿插帧 · Zygisk · arm64-v8a）
+# MCFI 补帧模块 v2.5.14（运动补偿插帧 · Zygisk · arm64-v8a）
 
 基于 Zygisk 的**运动补偿插帧（MCI）**模块，**同时支持 OpenGL ES 3.2+ 与 Vulkan 1.1+ 渲染的游戏与视频**。
 在相邻两个真实帧之间用 GPU 做块匹配运动估计，按运动矢量合成中间帧并插入呈现，画面连贯流畅、拖影显著低于普通混合。
@@ -8,7 +8,7 @@
 - **Vulkan 路径**：Hook `vkGetInstanceProcAddr` 一处入口，跟踪交换链，拦截 `vkQueuePresentKHR`；
   compute 运动估计 + 图形管线合成在异步 worker 线程执行，拷贝后严格 barrier 回 `PRESENT_SRC_KHR`。
 
-## 一、运动估计算法（v2.5.x）
+## 一、运动估计算法
 
 两后端统一采用**多尺度块匹配 + 子像素细化 + 置信度回退**：
 
@@ -26,23 +26,25 @@ L1 细层（1/4）                  →  以粗场为中心 ±1 + 时间预测 +
 |---|---|---|---|
 | L2 多尺度 | ✅ `uLv2` 参数化（游戏4/视频2） | ✅ 双缓冲 `mv_img_l2[2]` | 粗层先定大位移，细层局部求精 |
 | subgroup 归约 | ✅ `CS_ME1_SUB_SRC`（16 lane） | ✅ `me1_sub.comp` | 16 采样点 `subgroupAdd` 一次归约，省循环开销 |
-| FP16 | ✅ `mediump` | ✅ `*_f16.comp`（`VK_KHR_shader_float16_int8`） | 不支持自动回退 FP32 |
+| FP16 | ✅ `mediump` | ✅ `*_f16.comp` | 不支持自动回退 FP32 |
 | 硬件采样器 | ✅ `texture()` LINEAR | ✅ blit + `sampler` LINEAR | 插值交给 TMU，不手写双线性 |
 | 帧时间戳注入 | ✅ `eglPresentationTimeANDROID` | ✅ `VK_GOOGLE_display_timing` | 让 A / A.5 / B 各占一个 vsync，避免帧停留不均 |
 
 subgroup 能力判定：Vulkan 查 core `VkPhysicalDeviceSubgroupProperties.supportedOperations & ARITHMETIC_BIT`（不依赖 KHR 扩展名，Adreno 也能识别）；GLES 查 `GL_KHR_shader_subgroup_arithmetic`。
 
+**跨 context 同步**：worker 线程在独立 EGL context 画完生成帧后，主线程跨 context 读前必须加 `glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT)`，否则读到未定义内容 → 高频黑闪。
+
 ## 二、安装
 
 1. 确认 Magisk 已启用 **Zygisk**（Magisk App → 设置 → Zygisk 开关），设备为 arm64-v8a；
    KernelSU / APatch 环境请配合 **Zygisk Next** 使用（本模块只使用标准 Zygisk API 与 root companion，可兼容）。
-2. 刷入 `MCFI-补帧模块-v2.5.4-arm64.zip`，重启。
+2. 刷入 `MCFI-补帧模块-v2.5.14-arm64.zip`，重启。
 
 ## 三、控制面板
 
-手机浏览器直接打开：**http://127.0.0.1:4399**（端口被占用自动顺延，实际端口看 Magisk 模块页描述行）。
+手机浏览器直接打开：**http://127.0.0.1:4400**（端口被占用自动顺延，实际端口看 Magisk 模块页描述行）。
 
-（也可用电脑：`adb forward tcp:4399 tcp:4399` 后浏览器打开同一地址）
+（也可用电脑：`adb forward tcp:4400 tcp:4400` 后浏览器打开同一地址）
 
 | 参数 | 说明 |
 |---|---|
@@ -54,6 +56,7 @@ subgroup 能力判定：Vulkan 查 core `VkPhysicalDeviceSubgroupProperties.supp
 | 拖影抑制强度 | 0~100：遮挡区域保守程度 |
 | 插帧间隔 | 每 N 个真实帧插入 1 个生成帧；N=1 即帧率翻倍 |
 | 帧时间戳对齐 | 开（默认）：让生成帧与真实帧各占一个 vsync；关：退回原 present 节奏 |
+| 屏幕刷新率（Hz） | 填屏幕支持的最高刷新率（如 120），不是游戏帧率也不是插帧后帧率；0=自动估计 |
 
 **面板为手动刷新**：配置与日志都只在点击「刷新」按钮时重新读取，不会自动轮询覆盖你正在编辑的配置。
 
@@ -65,7 +68,7 @@ subgroup 能力判定：Vulkan 查 core `VkPhysicalDeviceSubgroupProperties.supp
 游戏进程                            守护进程(root)
    │ eglSwapBuffers / vkQueuePresentKHR 被 hook     ▲
    │  ① 真实帧 N+1 拷贝/入队（GLES 环形槽 / Vulkan 队列）│
-   │  ② 异步 worker：L2粗搜索→L1细化→中值滤波→双向warp │ HTTP :4399 控制面板
+   │  ② 异步 worker：L2粗搜索→L1细化→中值滤波→双向warp │ HTTP :4400 控制面板
    │     合成中间帧，先行呈现生成帧（带时间戳注入）     │ unix socket 配置服务
    │  ③ 真实帧 N+1 照常呈现（+2 vsync）              ▲
    ▼                                               │
@@ -98,10 +101,10 @@ logcat -s MCFI MCFID
 | `L2 pipeline 就绪: subgroup`（或 fp16/fp32） | Vulkan 选用的运动估计管线 |
 | `eglPresentationTimeANDROID 时间戳注入: 可用` | GLES 时间戳注入能力 |
 | `设备启用 VK_GOOGLE_display_timing` | Vulkan 时间戳注入能力 |
+| `未匹配到 app EGLConfig，按 ES3 回退（N 候选）` | EGLConfig 兜底生效（正常现象） |
 
 守护进程自身日志落盘在模块目录 `daemon.log`（面板「守护进程日志」卡片可读尾部）；
-各应用命中事件经 companion 上报后由守护进程环形保留在 `app.log`（最新 200 行），
-面板「最近生效记录」按 GLES（绿）/ Vulkan（蓝）着色区分。
+各应用命中事件经 companion 上报后由守护进程环形保留（面板「最近生效记录」按 GLES（绿）/ Vulkan（蓝）着色区分）。
 
 ## 六、性能与稳定性设计
 
@@ -111,7 +114,9 @@ logcat -s MCFI MCFID
    Vulkan 队列只保留最新任务，丢弃积压旧任务。
 3. **能力回退**：L2 / subgroup / fp16 / 时间戳注入任一环节探测或创建失败，自动降级到可用子集，
    绝不改动游戏自身呈现路径；`logcat -s MCFI` 可见原因。
-4. **视频模式**：`=video` 后缀走 GLES 同步路径 + 按 EGLContext 资源池（上限 3 套，防内存爆满），
+4. **EGLConfig 兜底**：找不到 app EGLConfig 时（视频私有 config / no_config_context），按 ES3 支持选 config，
+   不再直接熔断。
+5. **视频模式**：`=video` 后缀走 GLES 同步路径 + 按 EGLContext 资源池（上限 3 套，防内存爆满），
    过小 surface（弹幕/小窗/浮层，宽 < 500）直接透传，只对主画面插帧。Vulkan 视频也会 hook
    （`want_vk` 含 backend 0/2/3）。
 
@@ -123,6 +128,7 @@ logcat -s MCFI MCFID
 4. **subgroup 没生效**：看 `subgroup: arithmetic=` 是否为 1、`GLES ME1 已接入 subgroup 归约版` 是否出现；
    为 0 说明该设备驱动未暴露对应能力，已自动走普通版，不影响功能。
 5. **面板 404**：描述行里的端口才是实际端口。
+6. **GLES 游戏黑闪**：先确认面板「屏幕刷新率」填了屏幕最高刷新率（如 120）；预热阶段闪几下正常，持续闪请抓 `logcat -s MCFI`。
 
 ## 八、卸载
 

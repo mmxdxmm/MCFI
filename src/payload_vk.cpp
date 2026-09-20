@@ -2050,6 +2050,7 @@ static void worker_main() {
             }
             McfiConfig cfg;
             mcfi_get_config(&cfg);
+            g_log_level = cfg.log_level;   // 调试日志开关热更新（每次任务刷新，与 GLES 侧一致）
             std::lock_guard<std::mutex> lk(g_mtx);
             // 悬垂防护：游戏可能已销毁该 swapchain（worker 处理时按 sc 查最新 cx）
             auto it = g_swapchains.find(pf.sc);

@@ -145,6 +145,10 @@ Vulkan/GLES 着色器修改后需用 glslangValidator 16.x 重新生成 `*_spv.h
 
 ## 十、版本历史
 
+- **v2.6.15**：日志受控全链路核查——修复 Vulkan 侧 `VKLOGI` 的 `g_log_level` 仅在
+  `mcfi_vk_install` 设置一次、面板改「调试日志」后不实时生效的问题（worker 每次任务刷新）；
+  GLES（读 `g_cfg.log_level` 实时）、daemon（面板保存即生效）、zygisk 入口（随配置更新）
+  均已受控；ERROR 恒打、daemon.log/app.log 文件恒写为既有设计。
 - **v2.6.14**：插帧间隔键名整理为 `game_interval` / `video_interval`（直接替换，不兼容旧键
   `gen_interval`/`video_gen_interval`）：GLES 游戏异步路径用 `game_interval`、视频同步路径用
   `video_interval`；Vulkan 按 `g_backend_vk==B_VIDEO` 分流（视频与 GLES 视频共用视频档）；

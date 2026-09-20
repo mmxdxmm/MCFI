@@ -1,6 +1,6 @@
 id=mcfi
 name=MCFI 补帧模块
-version=v2.6.14
-versionCode=274
+version=v2.6.15
+versionCode=275
 author=MCFI Team
-description=v2.6.14：插帧间隔键名整理为 game_interval/video_interval（不兼容旧键）；Vulkan 按 B_VIDEO 分流取视频间隔；附配置解析单元测试（15 项）。
+description=v2.6.15：日志受控全链路核查——修复 Vulkan VKLOGI 不随面板调试日志开关热更新（worker 每次任务刷新 g_log_level），GLES/daemon/zygisk 入口均已受控。

@@ -1,4 +1,4 @@
-# MCFI 补帧模块 v2.5.21（运动补偿插帧 · Zygisk · arm64-v8a）
+# MCFI 补帧模块 v2.5.22（运动补偿插帧 · Zygisk · arm64-v8a）
 
 基于 Zygisk 的**运动补偿插帧（MCI）**模块，**同时支持 OpenGL ES 3.2+ 与 Vulkan 1.1+ 渲染的游戏与视频**。
 在相邻两个真实帧之间用 GPU 做块匹配运动估计，按运动矢量合成中间帧并插入呈现，画面连贯流畅、拖影显著低于普通混合。
@@ -10,11 +10,15 @@
 
 ## 零、更新历史
 
+**v2.5.22**
+
+- **移除**：删除旧配置键 `gen_interval` 的兼容逻辑，配置仅认 `game_interval` / `video_interval` 两个独立键
+  （旧键会被忽略，按各自默认值 1 处理）。
+
 **v2.5.21**
 
 - **新增**：插帧间隔拆分为「游戏插帧间隔（game_interval）」与「视频插帧间隔（video_interval）」两个独立配置，
   游戏（GLES 异步 + Vulkan）与视频（GLES 同步 + Vulkan）分别控制，互不影响；面板新增两个独立下拉框。
-  旧配置的 `gen_interval` 键自动兼容：未配置新键时两个间隔都取旧值。
 - **修复**：`me_quality`（运动估计质量）此前未写入配置解析器，面板保存后重启守护进程即重置为 60；
   现已补上解析，设置可持久生效。
 
@@ -59,7 +63,7 @@ subgroup 能力判定：Vulkan 查 core `VkPhysicalDeviceSubgroupProperties.supp
 
 1. 确认 Magisk 已启用 **Zygisk**（Magisk App → 设置 → Zygisk 开关），设备为 arm64-v8a；
    KernelSU / APatch 环境请配合 **Zygisk Next** 使用（本模块只使用标准 Zygisk API 与 root companion，可兼容）。
-2. 刷入 `MCFI-补帧模块-v2.5.21-arm64.zip`，重启。
+2. 刷入 `MCFI-补帧模块-v2.5.22-arm64.zip`，重启。
 
 ## 三、控制面板
 
@@ -183,7 +187,7 @@ Magisk 中移除模块并重启（`uninstall.sh` 会清理 `/data/local/tmp` 下
 NDK=/path/to/android-ndk-r27d ./build.sh
 ```
 
-产物：`/tmp/mcfi-out/MCFI-补帧模块-v2.5.21-arm64.zip`（zip 名随 `module.prop` 版本号自动变化）。
+产物：`/tmp/mcfi-out/MCFI-补帧模块-v2.5.22-arm64.zip`（zip 名随 `module.prop` 版本号自动变化）。
 
 修改 Vulkan shader 后重编 SPV（需要 glslangValidator）：
 

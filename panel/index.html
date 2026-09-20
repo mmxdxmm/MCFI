@@ -213,8 +213,8 @@ function render(cfg) {
   $('smooth_val').textContent = ($('smooth').value) + '%';
   $('me_quality').value = kv.me_quality ?? 60;
   $('me_val').textContent = ($('me_quality').value) + '%';
-  $('game_interval').value = kv.game_interval ?? kv.gen_interval ?? '1';
-  $('video_interval').value = kv.video_interval ?? kv.gen_interval ?? '1';
+  $('game_interval').value = kv.game_interval ?? '1';
+  $('video_interval').value = kv.video_interval ?? '1';
   $('log_level').checked = (kv.log_level ?? '0') === '1';
   $('vk_mci').checked = (kv.vk_mci ?? '0') === '1';
   $('gles_pts_enable').checked = (kv.gles_pts_enable ?? '0') === '1';

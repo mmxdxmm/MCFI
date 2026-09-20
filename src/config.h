@@ -126,8 +126,6 @@ public:
 
     static McfiConfig parse(const std::string &text) {
         McfiConfig c;
-        int old_gi = 1;             // 旧键 gen_interval 兼容：新键未显式配置时两个间隔都取它
-        bool has_game = false, has_video = false;
         size_t pos = 0;
         while (pos < text.size()) {
             size_t nl = text.find('\n', pos);
@@ -145,9 +143,8 @@ public:
             else if (k == "interp_mode")   c.interp_mode = atoi(v.c_str());
             else if (k == "strength")      c.strength = atoi(v.c_str());
             else if (k == "smooth")        c.smooth = atoi(v.c_str());
-            else if (k == "gen_interval")  old_gi = atoi(v.c_str());
-            else if (k == "game_interval")  { c.game_interval = atoi(v.c_str()); has_game = true; }
-            else if (k == "video_interval") { c.video_interval = atoi(v.c_str()); has_video = true; }
+            else if (k == "game_interval")  c.game_interval = atoi(v.c_str());
+            else if (k == "video_interval") c.video_interval = atoi(v.c_str());
             else if (k == "me_quality")    c.me_quality = atoi(v.c_str());
             else if (k == "video_interp_mode") c.video_interp_mode = atoi(v.c_str());
             else if (k == "panel_port")    c.panel_port = atoi(v.c_str());
@@ -161,8 +158,6 @@ public:
         if (c.strength > 100) c.strength = 100;
         if (c.smooth < 0) c.smooth = 0;
         if (c.smooth > 100) c.smooth = 100;
-        if (!has_game) c.game_interval = old_gi;
-        if (!has_video) c.video_interval = old_gi;
         if (c.game_interval < 1) c.game_interval = 1;
         if (c.video_interval < 1) c.video_interval = 1;
         if (c.me_quality < 0) c.me_quality = 0;

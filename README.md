@@ -144,6 +144,10 @@ Vulkan/GLES 着色器修改后需用 glslangValidator 16.x 重新生成 `*_spv.h
 
 ## 十、版本历史
 
+- **v2.6.12**：修复 Vulkan 后端帧相邻性——原 `need_work = do_insert || !has_prev` 导致观察期
+  （前 30 帧）与 `gen_interval>1` 跳帧帧完全不拷贝，插帧对跨 30 帧/2 帧大间隔合成（运动错位、
+  跳变）；改为非熔断状态每帧都拷贝当前帧，prev/cur 严格相邻，仅降档 3（熔断停插）完全停止。
+  注：GLES 端无此问题（主线程每帧拷帧 + `adjacent` 相邻检查跳过跨帧合成）。
 - **v2.6.11（回退 v2.6.10 重做）**：
   1. 移除主线程呈现生成帧前的 `glMemoryBarrier`（跨 context 无效，fence 已保证 GPU 完成）；
   2. 时间戳算法改为 vsync 向上取整对齐：`next_vsync + (k-1)*period`；

@@ -1,6 +1,6 @@
 id=mcfi
 name=MCFI 补帧模块
-version=v2.6.11
-versionCode=271
+version=v2.6.12
+versionCode=272
 author=MCFI Team
-description=v2.6.11：回退 v2.6.10 重做——移除主线程 glMemoryBarrier；时间戳对齐开关拆为 GLES/Vulkan 双独立开关（GLES 默认关=完全不注入，Vulkan 默认开=对齐 vsync 网格）；视频模式受 gen_interval 控制。
+description=v2.6.12：修复 Vulkan 帧相邻性——每帧拷贝当前帧（观察期/gen_interval 跳帧帧同样拷贝），prev/cur 严格相邻，仅熔断停插。

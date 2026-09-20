@@ -1611,14 +1611,15 @@ static void process_pending_frame(PendingFrame &pf, const McfiConfig &cfg) {
 
     int gi = cfg.gen_interval > 0 ? cfg.gen_interval : 1;
     if (cx->perf_level >= 2) gi = 2;                    // 降档2：隔帧插
+    // 每帧都拷贝当前帧（prev/cur 严格相邻）：观察期、gen_interval 跳帧帧同样拷贝，
+    // 避免跨 30 帧/2 帧大间隔合成导致运动错位、跳变；仅降档 3（熔断停插）完全停止
+    if (cx->perf_level >= 3) return;
     bool do_insert = cx->has_prev && (pf.present_count % gi) == 0 && cx->images.size() >= 3
-                     && cx->observe_left <= 0 && cx->perf_level < 3;   // 降档3：停插
+                     && cx->observe_left <= 0;
     if (cx->observe_left > 0) {
         cx->observe_left--;
         if (cx->observe_left == 0) VKLOGI("观察期结束，开始插帧");
     }
-    bool need_work = do_insert || !cx->has_prev;
-    if (!need_work) return;
 
     PresentSlot *slot = nullptr;
     for (auto &s : cx->slots) {

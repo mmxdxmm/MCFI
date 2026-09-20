@@ -1270,6 +1270,12 @@ static void async_worker_main(AsyncCtx *a) {
             if (a->stop.load()) break;
             if (prevSlot >= 0 && prevSlot < ASYNC_SLOTS)
                 a->slots[prevSlot].state = 0;   // 释放 prev 槽
+        } else {
+            // 跳帧（game_interval>1 时的非插帧帧）：prevSlot 未被本帧 ME/MCI 读取，立即释放，
+            // 否则旧 lastCurSlot 会被本帧覆盖后永不归还——4 个环形槽几帧内全部卡死在
+            // state=1，app 侧找不到空闲槽而丢帧，表现为 N=2/N=3 插帧完全不生效。
+            if (prevSlot >= 0 && prevSlot < ASYNC_SLOTS && prevSlot != slot)
+                a->slots[prevSlot].state = 0;
         }
         a->lastCurSlot = slot;
         a->hasPrev = true;

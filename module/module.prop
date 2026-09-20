@@ -1,6 +1,6 @@
 id=mcfi
 name=MCFI 补帧模块
-version=v2.5.20
-versionCode=270
+version=v2.5.21
+versionCode=271
 author=MCFI Team
-description=v2.5.20：修复 GLES 视频模式插帧间隔（gen_interval）不生效；修复 Vulkan 观察期/间隔跳帧破坏相邻帧关系；多尺度3DRS+subgroup+fp16，帧时间戳对齐。
+description=v2.5.21：插帧间隔拆分为游戏/视频独立控制（game_interval/video_interval，兼容旧 gen_interval）；修复 me_quality 重启后不生效；多尺度3DRS+subgroup+fp16，帧时间戳对齐。

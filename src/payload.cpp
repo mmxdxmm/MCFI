@@ -1209,7 +1209,7 @@ static void async_worker_main(AsyncCtx *a) {
         // 相邻检查：prev/cur 必须严格相邻（order 差 1）。app 丢帧后若直接合成跨帧中间帧，
         // 运动位置错位 → 画面跳变闪烁（直播场景尤其明显）。跨帧时跳过本帧插帧。
         bool adjacent = (a->lastOrder == -1) || (curOrder - a->lastOrder == 1);
-        bool do_insert = a->hasPrev.load() && adjacent && (jobNo % cfg.gen_interval) == 0;
+        bool do_insert = a->hasPrev.load() && adjacent && (jobNo % cfg.game_interval) == 0;
 
         if (do_insert) {
             // 等上一张生成帧被消费（防覆盖 & 防堆积）
@@ -1745,7 +1745,7 @@ static VideoCtx *video_acquire(EGLContext ctx, int w, int h) {
 }
 
 // 视频同步插帧（hook 内、app 上下文 current 时调用）：
-// 当前帧 → curTex；有 prev 时按 gen_interval 同步做多尺度 3DRS+合成 → 先呈现中间帧（orig swap）再恢复真实帧；
+// 当前帧 → curTex；有 prev 时按 video_interval 同步做多尺度 3DRS+合成 → 先呈现中间帧（orig swap）再恢复真实帧；
 // 交换 prev/cur 槽（不插帧的帧也保持相邻关系）。性能上限：同步耗时 ≥16ms 累计 3 次 → 升档（1 减候选 / 2 隔帧 / 3 熔断）。
 static void video_interp_sync(EGLDisplay dpy, EGLSurface surf, int w, int h, bool is_video) {
     EGLContext ctx = eglGetCurrentContext();
@@ -1791,10 +1791,10 @@ static void video_interp_sync(EGLDisplay dpy, EGLSurface surf, int w, int h, boo
     GLState st;
     saveState(st);
 
-    // 插帧间隔（gen_interval）：每 N 个真实帧插入 1 个生成帧（N=1 即每帧插，帧率翻倍）；
+    // 视频插帧间隔（video_interval）：每 N 个真实帧插入 1 个生成帧（N=1 即每帧插，帧率翻倍）；
     // 降档2（隔帧）强制 N=2。不插帧的帧仍拷贝真实帧并交换 prev/cur（保持相邻帧关系），
     // 外层 swap 呈现真实帧——否则间隔帧会跨大间隔合成（prev/cur 拉大，画面跳变闪烁）。
-    int gi = cfg.gen_interval > 0 ? cfg.gen_interval : 1;
+    int gi = cfg.video_interval > 0 ? cfg.video_interval : 1;
     if (v->perf_level >= 2) gi = 2;
     bool do_insert = v->hasPrev && (v->lastOrder % gi) == 0;
 
@@ -1920,11 +1920,11 @@ static EGLBoolean my_eglSwapBuffers(EGLDisplay dpy, EGLSurface surf) {
                     {
                         std::lock_guard<std::mutex> lk2(g_cfg_mtx);
                         if (nc.enabled != g_cfg.enabled || nc.interp_mode != g_cfg.interp_mode ||
-                            nc.strength != g_cfg.strength || nc.gen_interval != g_cfg.gen_interval ||
-                            nc.me_quality != g_cfg.me_quality) {
-                            LOGI("配置热更新: enabled=%d 算法=%s strength=%d interval=%d me=%d",
+                            nc.strength != g_cfg.strength || nc.game_interval != g_cfg.game_interval ||
+                            nc.video_interval != g_cfg.video_interval || nc.me_quality != g_cfg.me_quality) {
+                            LOGI("配置热更新: enabled=%d 算法=%s strength=%d 游戏间隔=%d 视频间隔=%d me=%d",
                                  nc.enabled, mcfi_algo_name(nc.interp_mode),
-                                 nc.strength, nc.gen_interval, nc.me_quality);
+                                 nc.strength, nc.game_interval, nc.video_interval, nc.me_quality);
                         }
                         g_cfg = nc;
                     }

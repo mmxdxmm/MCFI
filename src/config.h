@@ -34,8 +34,9 @@ struct McfiConfig {
     int  video_interp_mode = 1;    // 视频模式：0=MCI 1=普通混合(默认，稳定) 2=运动自适应混合
     int  strength = 60;            // MCI 遮挡/拖影抑制强度 0~100
     int  smooth = 60;             // 平滑强度 0~100（合成端静止保护 + 运动估计端时域收缩）
-    int  gen_interval = 1;         // 每 N 个真实帧插入 1 个生成帧
-    int  me_quality = 60;          // 运动估计质量/开销 0~100（决定搜索半径与细化级数）
+    int  game_interval = 1;       // 游戏插帧间隔：每 N 个真实帧插入 1 个生成帧（GLES 异步 + Vulkan 游戏）
+    int  video_interval = 1;      // 视频插帧间隔：每 N 个真实帧插入 1 个生成帧（GLES 同步 + Vulkan 视频）
+    int  me_quality = 60;         // 运动估计质量/开销 0~100（决定搜索半径与细化级数）
     int  panel_port = 4400;        // 控制面板端口（被占用自动顺延）
     int  log_level = 0;            // 0=关闭（默认） 1=普通
     int  vk_mci = 0;               // Vulkan 运动补偿开关：0=仅普通混合（部分驱动在 MCI 资源创建时崩溃，默认关闭保稳定）1=开启 MCI
@@ -125,6 +126,8 @@ public:
 
     static McfiConfig parse(const std::string &text) {
         McfiConfig c;
+        int old_gi = 1;             // 旧键 gen_interval 兼容：新键未显式配置时两个间隔都取它
+        bool has_game = false, has_video = false;
         size_t pos = 0;
         while (pos < text.size()) {
             size_t nl = text.find('\n', pos);
@@ -142,7 +145,10 @@ public:
             else if (k == "interp_mode")   c.interp_mode = atoi(v.c_str());
             else if (k == "strength")      c.strength = atoi(v.c_str());
             else if (k == "smooth")        c.smooth = atoi(v.c_str());
-            else if (k == "gen_interval")  c.gen_interval = atoi(v.c_str());
+            else if (k == "gen_interval")  old_gi = atoi(v.c_str());
+            else if (k == "game_interval")  { c.game_interval = atoi(v.c_str()); has_game = true; }
+            else if (k == "video_interval") { c.video_interval = atoi(v.c_str()); has_video = true; }
+            else if (k == "me_quality")    c.me_quality = atoi(v.c_str());
             else if (k == "video_interp_mode") c.video_interp_mode = atoi(v.c_str());
             else if (k == "panel_port")    c.panel_port = atoi(v.c_str());
             else if (k == "log_level")     c.log_level = atoi(v.c_str());
@@ -155,7 +161,10 @@ public:
         if (c.strength > 100) c.strength = 100;
         if (c.smooth < 0) c.smooth = 0;
         if (c.smooth > 100) c.smooth = 100;
-        if (c.gen_interval < 1) c.gen_interval = 1;
+        if (!has_game) c.game_interval = old_gi;
+        if (!has_video) c.video_interval = old_gi;
+        if (c.game_interval < 1) c.game_interval = 1;
+        if (c.video_interval < 1) c.video_interval = 1;
         if (c.me_quality < 0) c.me_quality = 0;
         if (c.me_quality > 100) c.me_quality = 100;
         if (c.interp_mode < 0 || c.interp_mode > 2) c.interp_mode = 0;
@@ -178,7 +187,8 @@ public:
                  "interp_mode=%d\n"
                  "strength=%d\n"
                  "smooth=%d\n"
-                 "gen_interval=%d\n"
+                 "game_interval=%d\n"
+                 "video_interval=%d\n"
                  "me_quality=%d\n"
                  "panel_port=%d\n"
                  "log_level=%d\n"
@@ -188,7 +198,7 @@ public:
                  "vsync_hz=%d\n"
                  "video_interp_mode=%d\n",
                  enabled ? 1 : 0, target_mode, targets.c_str(), interp_mode,
-                 strength, smooth, gen_interval, me_quality, panel_port, log_level, vk_mci, gles_pts_enable, vk_pts_enable, vsync_hz, video_interp_mode);
+                 strength, smooth, game_interval, video_interval, me_quality, panel_port, log_level, vk_mci, gles_pts_enable, vk_pts_enable, vsync_hz, video_interp_mode);
         return buf;
     }
 };

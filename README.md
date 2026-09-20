@@ -1,4 +1,4 @@
-# MCFI 补帧模块 v2.5.20（运动补偿插帧 · Zygisk · arm64-v8a）
+# MCFI 补帧模块 v2.5.21（运动补偿插帧 · Zygisk · arm64-v8a）
 
 基于 Zygisk 的**运动补偿插帧（MCI）**模块，**同时支持 OpenGL ES 3.2+ 与 Vulkan 1.1+ 渲染的游戏与视频**。
 在相邻两个真实帧之间用 GPU 做块匹配运动估计，按运动矢量合成中间帧并插入呈现，画面连贯流畅、拖影显著低于普通混合。
@@ -8,11 +8,20 @@
 - **Vulkan 路径**：Hook `vkGetInstanceProcAddr` 一处入口，跟踪交换链，拦截 `vkQueuePresentKHR`；
   compute 运动估计 + 图形管线合成在异步 worker 线程执行，拷贝后严格 barrier 回 `PRESENT_SRC_KHR`。
 
-## 零、v2.5.20 更新内容
+## 零、更新历史
 
-- **修复**：GLES 视频模式（`=video`）此前不受「插帧间隔（gen_interval）」控制——配置每 N 帧插 1 帧时
-  视频仍每帧插帧。现在视频同步路径按 `gen_interval` 跳帧，且跳过的帧仍拷贝并交换 prev/cur 缓存，
-  保持相邻帧关系（间隔帧不会跨大间隔合成）。
+**v2.5.21**
+
+- **新增**：插帧间隔拆分为「游戏插帧间隔（game_interval）」与「视频插帧间隔（video_interval）」两个独立配置，
+  游戏（GLES 异步 + Vulkan）与视频（GLES 同步 + Vulkan）分别控制，互不影响；面板新增两个独立下拉框。
+  旧配置的 `gen_interval` 键自动兼容：未配置新键时两个间隔都取旧值。
+- **修复**：`me_quality`（运动估计质量）此前未写入配置解析器，面板保存后重启守护进程即重置为 60；
+  现已补上解析，设置可持久生效。
+
+**v2.5.20**
+
+- **修复**：GLES 视频模式（`=video`）此前不受「插帧间隔」控制——配置每 N 帧插 1 帧时视频仍每帧插帧。
+  现在视频同步路径按间隔跳帧，且跳过的帧仍拷贝并交换 prev/cur 缓存，保持相邻帧关系（间隔帧不会跨大间隔合成）。
 - **修复**：Vulkan 后端在「观察期」与「间隔跳帧」时只拷贝首个/插帧帧，导致插帧对跨大间隔合成
   （运动错位跳变）。现在非熔断状态下每帧都拷贝当前真实帧，prev/cur 始终严格相邻。
 - **清理**：`config.conf` 中失效的 `pts_enable` 键替换为解析器实际支持的 `gles_pts_enable` / `vk_pts_enable`；
@@ -50,7 +59,7 @@ subgroup 能力判定：Vulkan 查 core `VkPhysicalDeviceSubgroupProperties.supp
 
 1. 确认 Magisk 已启用 **Zygisk**（Magisk App → 设置 → Zygisk 开关），设备为 arm64-v8a；
    KernelSU / APatch 环境请配合 **Zygisk Next** 使用（本模块只使用标准 Zygisk API 与 root companion，可兼容）。
-2. 刷入 `MCFI-补帧模块-v2.5.20-arm64.zip`，重启。
+2. 刷入 `MCFI-补帧模块-v2.5.21-arm64.zip`，重启。
 
 ## 三、控制面板
 
@@ -67,7 +76,8 @@ subgroup 能力判定：Vulkan 查 core `VkPhysicalDeviceSubgroupProperties.supp
 | 运动估计质量 | 0~100：搜索半径与细化级数，越高越清晰、开销越高 |
 | 拖影抑制强度 | 0~100：遮挡区域保守程度 |
 | 平滑强度 | 0~100：静止/近静止保护，解决远处与静止区域抖动 |
-| 插帧间隔 | 每 N 个真实帧插入 1 个生成帧；N=1 即帧率翻倍。**游戏与视频（GLES/Vulkan）模式均生效** |
+| 游戏插帧间隔 | 每 N 个真实帧插入 1 个生成帧；N=1 即帧率翻倍。作用于 GLES/Vulkan 游戏模式 |
+| 视频插帧间隔 | 每 N 个真实帧插入 1 个生成帧；N=1 即帧率翻倍。作用于 GLES/Vulkan 视频模式 |
 | 帧时间戳对齐 | GLES（默认关，部分设备会导致插帧失效）/ Vulkan（默认开）分别控制 |
 | 屏幕刷新率（Hz） | 填屏幕支持的最高刷新率（如 120），不是游戏帧率也不是插帧后帧率；0=自动估计 |
 
@@ -128,7 +138,7 @@ logcat -s MCFI MCFID
    （减候选 → 隔帧 → 熔断停插）。
 2. **防堆积**：GLES 用 4 个环形槽 + 栅栏同步 + 消费握手，worker 繁忙时直接丢弃当前帧；
    Vulkan 队列只保留最新任务，丢弃积压旧任务。
-3. **帧相邻性保证**：无论插帧与否（观察期 / `gen_interval` 间隔跳帧），当前真实帧都会被拷贝入缓存并
+3. **帧相邻性保证**：无论插帧与否（观察期 / 插帧间隔跳帧），当前真实帧都会被拷贝入缓存并
    交换 prev/cur，插帧对始终由严格相邻的两帧合成，避免跨大间隔导致的运动错位与跳变。
 4. **能力回退**：L2 / subgroup / fp16 / 时间戳注入任一环节探测或创建失败，自动降级到可用子集，
    绝不改动游戏自身呈现路径；`logcat -s MCFI` 可见原因。
@@ -173,7 +183,7 @@ Magisk 中移除模块并重启（`uninstall.sh` 会清理 `/data/local/tmp` 下
 NDK=/path/to/android-ndk-r27d ./build.sh
 ```
 
-产物：`/tmp/mcfi-out/MCFI-补帧模块-v2.5.20-arm64.zip`（zip 名随 `module.prop` 版本号自动变化）。
+产物：`/tmp/mcfi-out/MCFI-补帧模块-v2.5.21-arm64.zip`（zip 名随 `module.prop` 版本号自动变化）。
 
 修改 Vulkan shader 后重编 SPV（需要 glslangValidator）：
 

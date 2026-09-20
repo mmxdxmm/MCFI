@@ -1375,7 +1375,10 @@ static void process_pending_frame(PendingFrame &pf, const McfiConfig &cfg) {
                cx->extent.width, cx->extent.height, cx->images.size());
     }
 
-    int gi = cfg.gen_interval > 0 ? cfg.gen_interval : 1;
+    // 插帧间隔：视频模式（=video）用 video_interval，游戏用 game_interval，独立控制
+    bool vk_video = (g_backend_vk == McfiConfig::B_VIDEO);
+    int gi = vk_video ? (cfg.video_interval > 0 ? cfg.video_interval : 1)
+                      : (cfg.game_interval > 0 ? cfg.game_interval : 1);
     if (cx->perf_level >= 2) gi = 2;                    // 降档2：隔帧插
     bool do_insert = cx->has_prev && (pf.present_count % gi) == 0 && cx->images.size() >= 3
                      && cx->observe_left <= 0 && cx->perf_level < 3;   // 降档3：停插

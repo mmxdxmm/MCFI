@@ -209,13 +209,23 @@ static void handle_ctrl_data(Conn &c) {
 
 // ---------------- HTTP ----------------
 
+static const char *http_reason(int code) {
+    switch (code) {
+        case 200: return "OK";
+        case 204: return "No Content";
+        case 404: return "Not Found";
+        case 413: return "Payload Too Large";
+        default:  return "OK";
+    }
+}
+
 static void http_respond(Conn &c, int code, const char *ctype, const std::string &body, bool keep_alive) {
     char head[512];
     int n = snprintf(head, sizeof(head),
-                     "HTTP/1.1 %d OK\r\nContent-Type: %s\r\nContent-Length: %zu\r\n"
+                     "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length: %zu\r\n"
                      "Cache-Control: no-store\r\nAccess-Control-Allow-Origin: *\r\n"
                      "Connection: %s\r\n\r\n",
-                     code, ctype, body.size(), keep_alive ? "keep-alive" : "close");
+                     code, http_reason(code), ctype, body.size(), keep_alive ? "keep-alive" : "close");
     if (!send_all(c.fd, head, (size_t)n) || !send_all(c.fd, body.data(), body.size())) {
         close_conn(c);
         return;

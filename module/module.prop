@@ -3,4 +3,4 @@ name=MCFI 补帧模块
 version=v2.5.20
 versionCode=270
 author=MCFI Team
-description=v2.5.2：修正 subgroup 探测为查 core supportedOperations（Adreno 无 KHR 扩展名也能识别）；视频L2=1/8、L2多尺度、subgroup+fp16、帧时间戳对齐。
+description=v2.5.20：修复 GLES 视频模式插帧间隔（gen_interval）不生效；修复 Vulkan 观察期/间隔跳帧破坏相邻帧关系；多尺度3DRS+subgroup+fp16，帧时间戳对齐。

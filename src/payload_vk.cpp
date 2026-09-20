@@ -1383,7 +1383,10 @@ static void process_pending_frame(PendingFrame &pf, const McfiConfig &cfg) {
         cx->observe_left--;
         if (cx->observe_left == 0) VKLOGI("观察期结束，开始插帧");
     }
-    bool need_work = do_insert || !cx->has_prev;
+    // 观察期/间隔跳帧也必须拷贝当前帧，保持 prev/cur 严格相邻——否则首次插帧/间隔插帧会
+    // 跨大间隔合成（运动错位、画面跳变）；仅降档3（熔断停插）完全停止工作。
+    bool need_work = do_insert || !cx->has_prev || cx->observe_left > 0
+                     || (cx->perf_level < 3 && (pf.present_count % gi) != 0);
     if (!need_work) return;
 
     PresentSlot *slot = nullptr;

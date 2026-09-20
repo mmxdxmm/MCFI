@@ -1745,8 +1745,8 @@ static VideoCtx *video_acquire(EGLContext ctx, int w, int h) {
 }
 
 // 视频同步插帧（hook 内、app 上下文 current 时调用）：
-// 当前帧 → curTex；有 prev 时同步做多尺度 3DRS+合成 → 先呈现中间帧（orig swap）再恢复真实帧；
-// 交换 prev/cur 槽。性能上限：同步耗时 ≥16ms 累计 3 次 → 升档（1 减候选 / 2 隔帧 / 3 熔断）。
+// 当前帧 → curTex；有 prev 时按 gen_interval 同步做多尺度 3DRS+合成 → 先呈现中间帧（orig swap）再恢复真实帧；
+// 交换 prev/cur 槽（不插帧的帧也保持相邻关系）。性能上限：同步耗时 ≥16ms 累计 3 次 → 升档（1 减候选 / 2 隔帧 / 3 熔断）。
 static void video_interp_sync(EGLDisplay dpy, EGLSurface surf, int w, int h, bool is_video) {
     EGLContext ctx = eglGetCurrentContext();
     if (ctx == EGL_NO_CONTEXT) return;
@@ -1791,8 +1791,14 @@ static void video_interp_sync(EGLDisplay dpy, EGLSurface surf, int w, int h, boo
     GLState st;
     saveState(st);
 
-    // 隔帧档：奇数帧只更新真实帧缓存（保持相邻帧关系），不插帧；外层 swap 呈现真实帧
-    if (v->perf_level == 2 && ((v->lastOrder + 1) & 1) != 0) {
+    // 插帧间隔（gen_interval）：每 N 个真实帧插入 1 个生成帧（N=1 即每帧插，帧率翻倍）；
+    // 降档2（隔帧）强制 N=2。不插帧的帧仍拷贝真实帧并交换 prev/cur（保持相邻帧关系），
+    // 外层 swap 呈现真实帧——否则间隔帧会跨大间隔合成（prev/cur 拉大，画面跳变闪烁）。
+    int gi = cfg.gen_interval > 0 ? cfg.gen_interval : 1;
+    if (v->perf_level >= 2) gi = 2;
+    bool do_insert = v->hasPrev && (v->lastOrder % gi) == 0;
+
+    if (!do_insert) {
         glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, v->curFbo);
         glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);

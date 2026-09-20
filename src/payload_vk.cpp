@@ -1359,6 +1359,8 @@ static void VKAPI_CALL my_GetDeviceQueue(VkDevice device, uint32_t family, uint3
 // 在 worker 线程里处理一帧：copy 当前帧到 copy_img，按需 MCI/混合插帧并额外 present。
 // 调用方需持有 g_mtx。
 static void process_pending_frame(PendingFrame &pf, const McfiConfig &cfg) {
+    // 面板「调试日志」热更新：每次处理帧时同步日志开关，VKLOGI 即时跟随（安装时仅设初值）
+    g_log_level = cfg.log_level;
     SwapchainCtx *cx = pf.cx;
     VkQueue queue = pf.queue;
     uint32_t idx = pf.idx;

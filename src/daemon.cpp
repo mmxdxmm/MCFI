@@ -142,6 +142,8 @@ static void save_config(const std::string &text) {
     chmod(tmp.c_str(), 0664);
     rename(tmp.c_str(), MCFI_CONFIG);
     g_config_text = text;
+    // 面板「调试日志」保存后立即生效（否则要到下次 CFG 拉取/GET 才刷新）
+    g_daemon_log_level = McfiConfig::parse(text).log_level;
     FILE *m = fopen(MCFI_CONFIG_MIRROR, "wb");
     if (m) { fwrite(text.data(), 1, text.size(), m); fclose(m); chmod(MCFI_CONFIG_MIRROR, 0644); }
     LOGI("配置已保存 (%zu 字节)", text.size());
@@ -408,12 +410,11 @@ int main() {
     // 打开 daemon.log（追加），此后 LOGI/LOGE 同时写 logcat 和该文件
     g_logf = fopen(MCFI_DAEMON_LOG, "ab");
     if (g_logf) { chmod(MCFI_DAEMON_LOG, 0644); setvbuf(g_logf, nullptr, _IOLBF, 0); }
+    load_config();   // 先加载配置（含 log_level），启动横幅等 LOGI 均受面板「调试日志」控制
 #define STR2(x) #x
 #define STR(x) STR2(x)
     LOGI("======== MCFI 守护进程启动 %s ========", STR(MCFI_VERSION));
-    load_config();
     int port = McfiConfig::parse(g_config_text).panel_port;
-
     unlink(MCFI_SOCK);
     int ufd = socket(AF_UNIX, SOCK_STREAM, 0);
     sockaddr_un un{};

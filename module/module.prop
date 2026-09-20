@@ -1,6 +1,6 @@
 id=mcfi
 name=MCFI 补帧模块
-version=v2.5.22
-versionCode=272
+version=v2.5.23
+versionCode=273
 author=MCFI Team
-description=v2.5.22：移除旧 gen_interval 兼容，插帧间隔仅认 game_interval/video_interval 两个独立键；多尺度3DRS+subgroup+fp16，帧时间戳对齐。
+description=v2.5.23：调试日志开关全链路即时生效（Vulkan 载荷热更新同步、守护进程保存即生效、启动横幅受控），错误日志始终保留；插帧间隔游戏/视频独立控制。

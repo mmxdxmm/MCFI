@@ -1,4 +1,4 @@
-# MCFI 补帧模块 v2.5.22（运动补偿插帧 · Zygisk · arm64-v8a）
+# MCFI 补帧模块 v2.5.23（运动补偿插帧 · Zygisk · arm64-v8a）
 
 基于 Zygisk 的**运动补偿插帧（MCI）**模块，**同时支持 OpenGL ES 3.2+ 与 Vulkan 1.1+ 渲染的游戏与视频**。
 在相邻两个真实帧之间用 GPU 做块匹配运动估计，按运动矢量合成中间帧并插入呈现，画面连贯流畅、拖影显著低于普通混合。
@@ -9,6 +9,15 @@
   compute 运动估计 + 图形管线合成在异步 worker 线程执行，拷贝后严格 barrier 回 `PRESENT_SRC_KHR`。
 
 ## 零、更新历史
+
+**v2.5.23**
+
+- **修复**：Vulkan 载荷日志开关（VKLOGI）此前只在进程注入时读取 `log_level`，面板热更新不生效（关闭调试日志后
+  Vulkan 侧仍刷屏，直到应用重启）；现每次处理帧时同步，即时跟随。
+- **修复**：守护进程日志开关在面板保存后立即生效（此前需等待下一次配置拉取才刷新）；启动横幅移到配置加载之后，
+  同样受「调试日志」控制。
+- **说明**：错误级日志（LOGE / VKLOGE）始终输出，不随调试日志关闭，便于故障排查；
+  应用生效事件（面板「最近生效记录」）为面板功能数据通道，不写 logcat，不受调试日志影响。
 
 **v2.5.22**
 
@@ -63,7 +72,7 @@ subgroup 能力判定：Vulkan 查 core `VkPhysicalDeviceSubgroupProperties.supp
 
 1. 确认 Magisk 已启用 **Zygisk**（Magisk App → 设置 → Zygisk 开关），设备为 arm64-v8a；
    KernelSU / APatch 环境请配合 **Zygisk Next** 使用（本模块只使用标准 Zygisk API 与 root companion，可兼容）。
-2. 刷入 `MCFI-补帧模块-v2.5.22-arm64.zip`，重启。
+2. 刷入 `MCFI-补帧模块-v2.5.23-arm64.zip`，重启。
 
 ## 三、控制面板
 
@@ -157,7 +166,7 @@ logcat -s MCFI MCFID
 1. **守护进程**：Magisk 模块页看描述行是否显示「运行中 · 面板 http://127.0.0.1:xxxx」；`ps -A | grep mcfid`。
 2. **Zygisk 加载**：重启后 `logcat -s MCFI` 应出现「eglSwapBuffers hook 安装成功」或
    「Vulkan 后端 hook 安装完成」；没有则检查 Magisk 的 Zygisk 开关。
-3. **版本不对**：守护进程启动日志若仍显示旧版本号，说明模块未更新到位；重新刷入并重启。
+3. **版本不对**：面板开启「调试日志」后，守护进程启动日志若仍显示旧版本号，说明模块未更新到位；重新刷入并重启。
 4. **subgroup 没生效**：看 `subgroup: arithmetic=` 是否为 1；为 0 说明该设备驱动未暴露对应能力，
    已自动走普通版，不影响功能。
 5. **面板 404**：描述行里的端口才是实际端口。
@@ -187,7 +196,7 @@ Magisk 中移除模块并重启（`uninstall.sh` 会清理 `/data/local/tmp` 下
 NDK=/path/to/android-ndk-r27d ./build.sh
 ```
 
-产物：`/tmp/mcfi-out/MCFI-补帧模块-v2.5.22-arm64.zip`（zip 名随 `module.prop` 版本号自动变化）。
+产物：`/tmp/mcfi-out/MCFI-补帧模块-v2.5.23-arm64.zip`（zip 名随 `module.prop` 版本号自动变化）。
 
 修改 Vulkan shader 后重编 SPV（需要 glslangValidator）：
 

@@ -126,7 +126,7 @@
   </div>
   <div class="row">
     <div><label>游戏插帧间隔</label><div class="hint">游戏模式（GLES/Vulkan）：每 N 个真实帧插入 1 个生成帧；1 = 帧率翻倍</div></div>
-    <select id="gen_interval" style="width:auto;margin:0">
+    <select id="game_interval" style="width:auto;margin:0">
       <option value="1">每帧插入（×2）</option>
       <option value="2">每 2 帧插入（×1.5）</option>
       <option value="3">每 3 帧插入（×1.33）</option>
@@ -134,7 +134,7 @@
   </div>
   <div class="row">
     <div><label>视频插帧间隔</label><div class="hint">视频模式（=video 后缀）：每 N 个真实帧插入 1 个生成帧；1 = 帧率翻倍</div></div>
-    <select id="video_gen_interval" style="width:auto;margin:0">
+    <select id="video_interval" style="width:auto;margin:0">
       <option value="1">每帧插入（×2）</option>
       <option value="2">每 2 帧插入（×1.5）</option>
       <option value="3">每 3 帧插入（×1.33）</option>
@@ -219,8 +219,8 @@ function render(cfg) {
   $('me_quality').value = kv.me_quality ?? 60;
   $('me_val').textContent = ($('me_quality').value) + '%';
   $('me_mv16').checked = (kv.me_mv16 ?? '0') === '1';
-  $('gen_interval').value = kv.gen_interval ?? '1';
-  $('video_gen_interval').value = kv.video_gen_interval ?? '1';
+  $('game_interval').value = kv.game_interval ?? '1';
+  $('video_interval').value = kv.video_interval ?? '1';
   $('log_level').checked = (kv.log_level ?? '0') === '1';
   $('vk_mci').checked = (kv.vk_mci ?? '0') === '1';
   $('pts_align_gles').checked = (kv.pts_align_gles ?? '0') === '1';
@@ -238,8 +238,8 @@ function collect() {
     'video_interp_mode=' + $('video_interp_mode').value,
     'strength=' + $('strength').value,
     'smooth=' + $('smooth').value,
-    'gen_interval=' + $('gen_interval').value,
-    'video_gen_interval=' + $('video_gen_interval').value,
+    'game_interval=' + $('game_interval').value,
+    'video_interval=' + $('video_interval').value,
     'me_quality=' + $('me_quality').value,
     'me_mv16=' + ($('me_mv16').checked ? 1 : 0),
     'panel_port=4400',

@@ -30,8 +30,8 @@
 | 插帧算法 | MCI 运动补偿（默认，推荐）/ 普通混合（兼容）/ 运动自适应混合 |
 | 运动估计质量 | 0~100：搜索半径与细化级数，越高越清晰、开销越高 |
 | 拖影抑制强度 | 0~100：遮挡区域保守程度 |
-| 游戏插帧间隔 | 游戏模式（GLES/Vulkan）每 N 个真实帧插入 1 个生成帧；N=1 即帧率翻倍 |
-| 视频插帧间隔 | 视频模式（`=video` 后缀）每 N 个真实帧插入 1 个生成帧；N=1 即帧率翻倍 |
+| 游戏插帧间隔（game_interval） | 游戏模式（GLES/Vulkan）每 N 个真实帧插入 1 个生成帧；N=1 即帧率翻倍 |
+| 视频插帧间隔（video_interval） | 视频模式（GLES `=video` / Vulkan `B_VIDEO`）每 N 个真实帧插入 1 个生成帧；N=1 即帧率翻倍 |
 | 运动矢量场半精度（MV16） | MV 场用 RGBA16F 半浮点存储，带宽/显存占用减半；失败自动回退全精度 |
 | 屏幕刷新率（Hz） | 填屏幕支持的最高刷新率（60/90/120/144），**不是游戏帧率**；0=自动估计 |
 | GLES 时间戳对齐 | GLES 时间戳注入并对齐 vsync 整数倍；⚠ 实测部分设备注入致插帧失效，**默认关闭**（关=完全不注入） |
@@ -145,6 +145,10 @@ Vulkan/GLES 着色器修改后需用 glslangValidator 16.x 重新生成 `*_spv.h
 
 ## 十、版本历史
 
+- **v2.6.14**：插帧间隔键名整理为 `game_interval` / `video_interval`（直接替换，不兼容旧键
+  `gen_interval`/`video_gen_interval`）：GLES 游戏异步路径用 `game_interval`、视频同步路径用
+  `video_interval`；Vulkan 按 `g_backend_vk==B_VIDEO` 分流（视频与 GLES 视频共用视频档）；
+  面板双下拉与 config.conf 同步；补 `me_quality` 解析回归验证（该解析自 v2.6.6 起存在）。
 - **v2.6.13**：插帧间隔拆分为「游戏插帧间隔」（`gen_interval`，GLES/Vulkan 游戏模式）与
   「视频插帧间隔」（`video_gen_interval`，视频模式）两个独立配置，面板双下拉独立控制。
 - **v2.6.12**：修复 Vulkan 后端帧相邻性——原 `need_work = do_insert || !has_prev` 导致观察期

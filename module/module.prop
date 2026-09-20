@@ -1,6 +1,6 @@
 id=mcfi
 name=MCFI 补帧模块
-version=v2.6.13
-versionCode=273
+version=v2.6.14
+versionCode=274
 author=MCFI Team
-description=v2.6.13：插帧间隔拆分为游戏插帧间隔（gen_interval）与视频插帧间隔（video_gen_interval），双模式独立控制。
+description=v2.6.14：插帧间隔键名整理为 game_interval/video_interval（不兼容旧键）；Vulkan 按 B_VIDEO 分流取视频间隔；附配置解析单元测试（15 项）。

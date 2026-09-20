@@ -1,6 +1,6 @@
 id=mcfi
 name=MCFI 补帧模块
-version=v2.6.15
-versionCode=275
+version=v2.6.16
+versionCode=276
 author=MCFI Team
-description=v2.6.15：日志受控全链路核查——修复 Vulkan VKLOGI 不随面板调试日志开关热更新（worker 每次任务刷新 g_log_level），GLES/daemon/zygisk 入口均已受控。
+description=v2.6.16：修复 GLES 游戏异步路径插帧间隔 N=2/N=3 完全不生效——跳帧帧未释放旧槽导致 4 个环形槽全部卡死 state=1（30→30）；跳帧分支立即释放 prevSlot，N=2≈×1.5、N=3≈×1.33。

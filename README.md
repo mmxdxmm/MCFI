@@ -145,6 +145,14 @@ Vulkan/GLES 着色器修改后需用 glslangValidator 16.x 重新生成 `*_spv.h
 
 ## 十、版本历史
 
+- **v2.6.16**：修复 GLES 游戏异步路径「插帧间隔」N=2/N=3 完全不生效（30→30）。根因：
+  `async_worker_main()` 跳帧帧（`do_insert=false`，`game_interval>1` 时的非插帧帧）只更新
+  `lastCurSlot` 却未释放旧 `prevSlot`，4 个环形槽在「插帧→跳帧」循环中逐个卡死在 `state=1`，
+  app 线程扫描不到空闲槽即丢帧，插帧整体失效。修复：跳帧分支立即释放 `prevSlot`
+  （该帧不做运动估计、无 GPU 读取，立即释放安全；`prevSlot != slot` 防环形回绕误标）；
+  插帧分支维持原时序（等 app 消费完生成帧再释放）。修复后 N=2 ≈ ×1.5、N=3 ≈ ×1.33，
+  槽位不再泄漏。视频同步路径（双槽 + 每帧 swap）与 Vulkan 路径（每帧拷贝 + cur_slot 翻转）
+  不受影响。
 - **v2.6.15**：日志受控全链路核查——修复 Vulkan 侧 `VKLOGI` 的 `g_log_level` 仅在
   `mcfi_vk_install` 设置一次、面板改「调试日志」后不实时生效的问题（worker 每次任务刷新）；
   GLES（读 `g_cfg.log_level` 实时）、daemon（面板保存即生效）、zygisk 入口（随配置更新）

@@ -91,8 +91,14 @@ static void mcfi_vsync_sample(int64_t now_ns) {
 }
 // 把 surface 的期望上屏时间设为 now + k 个 vsync 周期
 static void mcfi_set_pts(EGLDisplay dpy, EGLSurface surf, int k) {
-    if (!g_eglPts || !g_cfg.pts_enable) return;
-    g_eglPts(dpy, surf, mcfi_now_ns() + (int64_t)k * g_vsync_period_ns.load());
+    // GLES 时间戳对齐开关即注入开关：关=完全不注入（原生行为）
+    if (!g_eglPts || !g_cfg.pts_align_gles) return;
+    // 对齐 vsync 网格：向上取整到下一边界再偏移 (k-1) 个周期（SF 对时间戳向上取整，
+    // 避免旧 now+k*period 被二次取整导致整体晚一个周期）
+    int64_t period = g_vsync_period_ns.load();
+    int64_t now = mcfi_now_ns();
+    int64_t next_vsync = ((now + period - 1) / period) * period;
+    g_eglPts(dpy, surf, next_vsync + (k - 1) * period);
 }
 // 真实帧上屏：若本帧插入了生成帧，则把真实帧期望上屏时间设为 +2 vsync，并采样周期
 static inline EGLBoolean mcfi_swap_real(EGLDisplay dpy, EGLSurface surf) {
@@ -1749,9 +1755,7 @@ static void async_game_path(EGLDisplay dpy, EGLSurface surf, int w, int h) {
                 // 画生成帧 -> 默认帧缓冲，先行呈现（时间戳注入：A.5 上屏于下一个 vsync）
                 glBindFramebuffer(GL_FRAMEBUFFER, 0);
                 glViewport(0, 0, w, h);
-                // 跨 context 内存屏障：genTex 由 worker 线程在另一 EGL context 写入，
-                // 仅等 fence（GPU 命令完成）不够，需保证纹理内容对本 context 可见，否则读到未定义/黑帧
-                glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT);
+                // genTex 由 worker 在另一 context 写入，已由下游 fence（glClientWaitSync）保证 GPU 完成
                 draw_texture(a->progCopy, a->vao, a->genTex);
                 mcfi_set_pts(dpy, surf, 1);
                 g_pts_pending = true;
@@ -1980,8 +1984,11 @@ static void video_interp_sync(EGLDisplay dpy, EGLSurface surf, int w, int h) {
     GLState st;
     saveState(st);
 
-    // 隔帧档：奇数帧只更新真实帧缓存（保持相邻帧关系），不插帧；外层 swap 呈现真实帧
-    if (v->perf_level == 2 && ((v->lastOrder + 1) & 1) != 0) {
+    // 跳过档：本帧不插 → 只更新真实帧缓存（保持相邻帧关系），外层 swap 呈现真实帧。
+    //   perf_level==2 = 性能自适应隔帧（每 2 帧插 1）；gen_interval = 用户插帧间隔（每 N 帧插 1），
+    //   视频模式同样受插帧间隔控制；两者取更省（skip 更大者）。
+    int skip = v->perf_level == 2 ? (cfg.gen_interval > 2 ? cfg.gen_interval : 2) : cfg.gen_interval;
+    if (skip > 1 && ((v->lastOrder + 1) % skip) != 0) {
         glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, v->curFbo);
         glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);

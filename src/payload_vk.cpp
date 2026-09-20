@@ -153,6 +153,11 @@ static std::atomic<int64_t> g_vk_vsync_ns{8333333};
 static std::atomic<uint64_t> g_vk_gen_seq{0};     // worker 已 present 的生成帧计数
 static int64_t g_vk_last_real_ns = 0;
 
+// 时间戳对齐 vsync 网格：向上取整到下一边界再偏移 (k-1) 个周期
+static int64_t mcfi_vk_align_pts(int64_t now_ns, int64_t period_ns, int k) {
+    int64_t next_vsync = ((now_ns + period_ns - 1) / period_ns) * period_ns;
+    return next_vsync + (int64_t)(k - 1) * period_ns;
+}
 static int64_t mcfi_vk_now_ns() {
     timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
     return (int64_t)ts.tv_sec * 1000000000ll + ts.tv_nsec;
@@ -1959,12 +1964,12 @@ static void process_pending_frame(PendingFrame &pf, const McfiConfig &cfg) {
             gpi.swapchainCount = 1;
             gpi.pSwapchains = &cx->sc;
             gpi.pImageIndices = &gen_idx;
-            // 时间戳注入：生成帧 A.5 期望上屏于 +1 vsync
+            // 时间戳注入：生成帧 A.5 期望上屏于 +1 vsync（pts_align_vk 开关，默认开）
             mcfi_VkPresentTimesInfoGOOGLE pts{};
             mcfi_VkPresentTimeGOOGLE pt{};
-            if (g_vk_pts && cfg.pts_enable) {
+            if (g_vk_pts && cfg.pts_align_vk) {
                 pt.presentID = 0;
-                pt.desiredPresentTime = mcfi_vk_now_ns() + g_vk_vsync_ns.load();
+                pt.desiredPresentTime = mcfi_vk_align_pts(mcfi_vk_now_ns(), g_vk_vsync_ns.load(), 1);
                 pts.sType = (VkStructureType)MCFI_PRESENT_TIMES_INFO_GOOGLE;
                 pts.swapchainCount = 1;
                 pts.pTimes = &pt;
@@ -2125,7 +2130,7 @@ static VkResult VKAPI_CALL my_QueuePresentKHR(VkQueue queue, const VkPresentInfo
     // 与生成帧 A.5(+1 vsync) 各占一个完整周期；否则原样呈现。
     VkResult r;
     McfiConfig vkcfg; mcfi_get_config(&vkcfg);
-    if (g_vk_pts && vkcfg.pts_enable) {
+    if (g_vk_pts && vkcfg.pts_align_vk) {
         static uint64_t s_last_gen = 0;
         uint64_t gen = g_vk_gen_seq.load();
         if (gen != s_last_gen) {
@@ -2133,7 +2138,7 @@ static VkResult VKAPI_CALL my_QueuePresentKHR(VkQueue queue, const VkPresentInfo
             mcfi_VkPresentTimesInfoGOOGLE pts{};
             mcfi_VkPresentTimeGOOGLE pt{};
             pt.presentID = 0;
-            pt.desiredPresentTime = mcfi_vk_now_ns() + 2 * g_vk_vsync_ns.load();
+            pt.desiredPresentTime = mcfi_vk_align_pts(mcfi_vk_now_ns(), g_vk_vsync_ns.load(), 2);
             pts.sType = (VkStructureType)MCFI_PRESENT_TIMES_INFO_GOOGLE;
             pts.swapchainCount = pInfo->swapchainCount;
             pts.pTimes = &pt;

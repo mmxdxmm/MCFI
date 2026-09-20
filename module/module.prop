@@ -1,6 +1,6 @@
 id=mcfi
 name=MCFI 补帧模块
-version=v2.6.10
-versionCode=270
+version=v2.6.11
+versionCode=271
 author=MCFI Team
-description=v2.6.10：视频模式独立插帧算法选择（video_interp_mode，默认普通混合，与游戏算法解耦）；v2.6.9：视频性能自适应阈值放宽（≥25ms×10 次升档）。
+description=v2.6.11：回退 v2.6.10 重做——移除主线程 glMemoryBarrier；时间戳对齐开关拆为 GLES/Vulkan 双独立开关（GLES 默认关=完全不注入，Vulkan 默认开=对齐 vsync 网格）；视频模式受 gen_interval 控制。

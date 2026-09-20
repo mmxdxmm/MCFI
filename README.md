@@ -33,6 +33,8 @@
 | 插帧间隔 | 每 N 个真实帧插入 1 个生成帧；N=1 即帧率翻倍 |
 | 运动矢量场半精度（MV16） | MV 场用 RGBA16F 半浮点存储，带宽/显存占用减半；失败自动回退全精度 |
 | 屏幕刷新率（Hz） | 填屏幕支持的最高刷新率（60/90/120/144），**不是游戏帧率**；0=自动估计 |
+| GLES 时间戳对齐 | GLES 时间戳注入并对齐 vsync 整数倍；⚠ 实测部分设备注入致插帧失效，**默认关闭**（关=完全不注入） |
+| Vulkan 时间戳对齐 | Vulkan 时间戳注入并对齐 vsync 整数倍（desiredPresentTime）；**默认开启**，如发现不插帧请关闭对照 |
 
 **面板为手动刷新**：配置与日志都只在点击「刷新」按钮时重新读取，不会自动轮询覆盖你正在编辑的配置。
 
@@ -64,6 +66,13 @@ zygisk companion（root 中继，规避 SELinux）──────────
 
 - 生成帧与真实帧通过 `EGL_ANDROID_presentation_time`（GLES）/ `VK_GOOGLE_display_timing`（Vulkan）
   各占一个完整 vsync 周期，避免连发两帧导致停留不均、掉帧或黑屏。
+- **时间戳对齐 = 时间戳注入开关（GLES / Vulkan 双独立开关）**：GLES 对齐开关直接控制 GLES 端
+  是否调用 `eglPresentationTimeANDROID`（默认关=完全不注入，原生行为——实测注入在部分设备
+  因 SF 排期积压致插帧失效）；Vulkan 对齐开关直接控制 Vulkan 端是否设置 `desiredPresentTime`
+  （默认开）。两个开关互不干扰，各管各的对应模式，没有"总开关"概念。
+- **对齐算法**：注入时时间戳钉到 vsync 整数倍网格——
+  `next_vsync = ((now + period - 1) / period) * period`，注入 `next_vsync + (k-1)*period`
+  （k=1 生成帧、k=2 真实帧），避免旧 `now+k*period` 被 SF 二次取整导致整体晚一个周期。
 - **vsync 周期来源**：`vsync_hz>0` 时直接用 1e9/vsync_hz（手动指定，推荐填屏幕最高刷新率）；
   `vsync_hz=0` 时用相邻真实帧 swap 间隔做 IIR 平滑估计（合理区间 3~20ms）。
   硬编码 120Hz 在 60/90/144Hz 设备上会设错时间戳导致掉帧/黑屏，v2.6.6 起已改为可配置。
@@ -72,8 +81,9 @@ zygisk companion（root 中继，规避 SELinux）──────────
 
 1. **异步不抢渲染**：GLES 游戏模式 hook 线程只做「拷帧 + 必要时画生成帧并 swap」两件廉价操作，
    运动估计/合成全部在共享上下文的 worker 线程执行；Vulkan 的 GPU 操作全部在 worker 线程。
-2. **跨 context 同步**：GLES worker 在独立 EGL context 写生成帧，主线程呈现前以 fence +
-   `glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT)` 双重保证纹理内容可见，杜绝黑闪。
+2. **跨 context 同步**：GLES worker 在独立 EGL context 写生成帧，主线程呈现前以
+   `glClientWaitSync` fence 等待 GPU 命令完成（fence 已保证完成；实测跨 context 的
+   `glMemoryBarrier` 无额外作用，v2.6.11 起已移除）。
 3. **防堆积**：GLES 用 4 个环形槽 + 栅栏同步 + 消费握手，worker 繁忙时直接丢弃当前帧（不阻塞、不积压）；
    Vulkan 队列只保留最新任务，丢弃积压旧任务。
 4. **老驱动兼容**：Vulkan 拷贝后强制 barrier 回 `PRESENT_SRC_KHR`；资源创建/能力检查失败只降级为
@@ -93,7 +103,7 @@ zygisk companion（root 中继，规避 SELinux）──────────
 3. **命中应用**：打开目标应用后 `logcat -s MCFI` 应出现「目标进程命中: 包名，后端=…」与接口命中日志。
 4. **面板 404**：描述行里的端口才是实际端口；面板「守护进程日志」卡片可看 daemon.log 尾部。
 5. **黑屏/掉帧**：确认面板「屏幕刷新率」是否与设备一致（或保持 0 自动）；时间戳注入异常先关
-   「帧时间戳对齐」对照。
+   「GLES 时间戳对齐」对照。
 6. **MV16**：`logcat -s MCFI` 看 `MV16 探测` 三项支持度与 `rgba16f 链接` 是否回退。
 
 ## 七、卸载
@@ -134,6 +144,17 @@ Vulkan/GLES 着色器修改后需用 glslangValidator 16.x 重新生成 `*_spv.h
 
 ## 十、版本历史
 
+- **v2.6.11（回退 v2.6.10 重做）**：
+  1. 移除主线程呈现生成帧前的 `glMemoryBarrier`（跨 context 无效，fence 已保证 GPU 完成）；
+  2. 时间戳算法改为 vsync 向上取整对齐：`next_vsync + (k-1)*period`；
+  3. 时间戳对齐开关**拆为 GLES / Vulkan 双独立开关，直接控制对应模式的时间戳注入**：
+     GLES 默认关（关=完全不注入，实测注入致插帧失效）；Vulkan 默认开；废弃此前"总开关+
+     子开关"的两级结构（v2.6.11~v2.6.15 期间的实现全部回退重做）；
+  4. 修复视频模式不受插帧间隔控制：`video_interp_sync` 按 `gen_interval` 每 N 帧插 1 帧，
+     与性能自适应隔帧取更省者。
+- **v2.6.10**：视频模式独立插帧算法选择（`video_interp_mode`，默认普通混合，与游戏算法解耦）。
+- **v2.6.9**：视频模式性能自适应阈值放宽（≥25ms 累计 10 次升档）。
+- **v2.6.8 / v2.6.7**：调试日志默认关闭（`log_level=0`），日志开关全链路生效（daemon/zygisk 入口/载荷统一受控）。
 - **v2.6.6**：vsync 周期可配置（`vsync_hz`，修复硬编码 120Hz 在 60/90/144Hz 设备时间戳设错导致的黑屏）；GLES 主线程跨 context 读生成帧前补 `glMemoryBarrier` 消除黑闪；面板补刷新率输入。
 - **v2.6.5**：面板补 MV16 开关，修复面板保存丢 `me_mv16` 项。
 - **v2.6.4**：修复 MV16 模式下 `glBindImageTexture` 绑定格式未联动（RGBA16F 纹理绑 RGBA32F 的规范违规）。

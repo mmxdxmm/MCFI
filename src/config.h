@@ -39,7 +39,8 @@ struct McfiConfig {
     int  panel_port = 4400;        // 控制面板端口（被占用自动顺延）
     int  log_level = 0;            // 0=关闭（默认，logcat 仅保留 ERROR）1=普通（INFO 全开）
     int  vk_mci = 0;               // Vulkan 运动补偿开关：0=仅普通混合（部分驱动在 MCI 资源创建时崩溃，默认关闭保稳定）1=开启 MCI
-    int  pts_enable = 1;           // SurfaceFlinger 时间戳注入：1=让生成帧/真实帧各占一个 vsync（默认开）0=关闭
+    int  pts_align_gles = 0;       // GLES 时间戳对齐（= GLES 时间戳注入开关）：1=注入并对齐 vsync 网格（next_vsync+(k-1)*period）0=完全不注入（默认关，实测注入在部分设备致插帧失效）
+    int  pts_align_vk = 1;         // Vulkan 时间戳对齐（= Vulkan 时间戳注入开关）：1=注入并对齐 vsync 网格（默认开）0=完全不注入
     int  me_mv16 = 0;              // GLES 运动矢量场 16bit 精度：0=RGBA8（默认）1=尝试 16bit（探测失败自动回退）
     int  vsync_hz = 0;             // 屏幕刷新率（Hz）：0=自动估计（默认）>0=手动指定（如 60/90/120/144）
 
@@ -148,7 +149,8 @@ public:
             else if (k == "panel_port")    c.panel_port = atoi(v.c_str());
             else if (k == "log_level")     c.log_level = atoi(v.c_str());
             else if (k == "vk_mci")        c.vk_mci = atoi(v.c_str());
-            else if (k == "pts_enable")    c.pts_enable = atoi(v.c_str());
+            else if (k == "pts_align_gles") c.pts_align_gles = atoi(v.c_str());
+            else if (k == "pts_align_vk")  c.pts_align_vk = atoi(v.c_str());
             else if (k == "me_mv16")       c.me_mv16 = atoi(v.c_str());
             else if (k == "vsync_hz")      c.vsync_hz = atoi(v.c_str());
         }
@@ -163,7 +165,8 @@ public:
         if (c.video_interp_mode < 0 || c.video_interp_mode > 2) c.video_interp_mode = 1;
         if (c.panel_port <= 0 || c.panel_port > 65535) c.panel_port = 4400;
         if (c.vk_mci < 0 || c.vk_mci > 1) c.vk_mci = 0;
-        if (c.pts_enable < 0 || c.pts_enable > 1) c.pts_enable = 1;
+        if (c.pts_align_gles < 0 || c.pts_align_gles > 1) c.pts_align_gles = 0;
+        if (c.pts_align_vk < 0 || c.pts_align_vk > 1) c.pts_align_vk = 1;
         if (c.me_mv16 < 0 || c.me_mv16 > 1) c.me_mv16 = 0;
         if (c.vsync_hz < 0 || c.vsync_hz > 1000) c.vsync_hz = 0;
         return c;
@@ -185,11 +188,13 @@ public:
                  "panel_port=%d\n"
                  "log_level=%d\n"
                  "vk_mci=%d\n"
-                 "pts_enable=%d\n"
+                 "pts_align_gles=%d\n"
+                 "pts_align_vk=%d\n"
                  "me_mv16=%d\n"
                  "vsync_hz=%d\n",
                  enabled ? 1 : 0, target_mode, targets.c_str(), interp_mode, video_interp_mode,
-                 strength, smooth, gen_interval, me_quality, panel_port, log_level, vk_mci, pts_enable, me_mv16, vsync_hz);
+                 strength, smooth, gen_interval, me_quality, panel_port, log_level, vk_mci,
+                 pts_align_gles, pts_align_vk, me_mv16, vsync_hz);
         return buf;
     }
 };

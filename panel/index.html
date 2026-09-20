@@ -143,8 +143,12 @@
 
 <div class="card">
   <div class="row">
-    <div><label>帧时间戳对齐（流畅度）</label><div class="hint">让生成帧与真实帧各占一个完整 vsync 周期（GLES: eglPresentationTimeANDROID / Vulkan: GOOGLE_display_timing），消除连发两帧导致的停留时间不均与掉帧感。扩展不支持时自动忽略。</div></div>
-    <div class="switch"><input type="checkbox" id="pts_enable" checked><span class="slider-t" onclick="document.getElementById('pts_enable').click()"></span></div>
+    <div><label>GLES 时间戳对齐</label><div class="hint">GLES 时间戳注入并对齐 vsync 整数倍（生成帧/真实帧各占一个周期，少一帧显示延迟）。⚠ 实测部分设备注入会因 SF 排期积压致插帧失效，默认关闭；关闭=完全不注入（原生行为）</div></div>
+    <div class="switch"><input type="checkbox" id="pts_align_gles"><span class="slider-t" onclick="document.getElementById('pts_align_gles').click()"></span></div>
+  </div>
+  <div class="row">
+    <div><label>Vulkan 时间戳对齐</label><div class="hint">Vulkan 时间戳注入并对齐 vsync 整数倍（desiredPresentTime），默认开启；如发现不插帧请关闭对照</div></div>
+    <div class="switch"><input type="checkbox" id="pts_align_vk" checked><span class="slider-t" onclick="document.getElementById('pts_align_vk').click()"></span></div>
   </div>
   <div class="row">
     <div><label>屏幕刷新率（Hz）</label><div class="hint">填屏幕支持的最高刷新率（如 60/90/120/144），不是游戏帧率；0=自动按帧间隔估计</div></div>
@@ -210,7 +214,8 @@ function render(cfg) {
   $('gen_interval').value = kv.gen_interval ?? '1';
   $('log_level').checked = (kv.log_level ?? '0') === '1';
   $('vk_mci').checked = (kv.vk_mci ?? '0') === '1';
-  $('pts_enable').checked = (kv.pts_enable ?? '1') !== '0';
+  $('pts_align_gles').checked = (kv.pts_align_gles ?? '0') === '1';
+  $('pts_align_vk').checked = (kv.pts_align_vk ?? '1') !== '0';
   $('vsync_hz').value = kv.vsync_hz ?? '0';
 }
 
@@ -230,7 +235,8 @@ function collect() {
     'panel_port=4400',
     'log_level=' + ($('log_level').checked ? 1 : 0),
     'vk_mci=' + ($('vk_mci').checked ? 1 : 0),
-    'pts_enable=' + ($('pts_enable').checked ? 1 : 0),
+    'pts_align_gles=' + ($('pts_align_gles').checked ? 1 : 0),
+    'pts_align_vk=' + ($('pts_align_vk').checked ? 1 : 0),
     'vsync_hz=' + $('vsync_hz').value,
   ];
   return lines.join('\n') + '\n';

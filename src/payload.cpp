@@ -1985,9 +1985,10 @@ static void video_interp_sync(EGLDisplay dpy, EGLSurface surf, int w, int h) {
     saveState(st);
 
     // 跳过档：本帧不插 → 只更新真实帧缓存（保持相邻帧关系），外层 swap 呈现真实帧。
-    //   perf_level==2 = 性能自适应隔帧（每 2 帧插 1）；gen_interval = 用户插帧间隔（每 N 帧插 1），
-    //   视频模式同样受插帧间隔控制；两者取更省（skip 更大者）。
-    int skip = v->perf_level == 2 ? (cfg.gen_interval > 2 ? cfg.gen_interval : 2) : cfg.gen_interval;
+    //   perf_level==2 = 性能自适应隔帧（每 2 帧插 1）；video_gen_interval = 视频插帧间隔（每 N 帧插 1），
+    //   两者取更省（skip 更大者）。
+    int skip = v->perf_level == 2 ? (cfg.video_gen_interval > 2 ? cfg.video_gen_interval : 2)
+                                  : cfg.video_gen_interval;
     if (skip > 1 && ((v->lastOrder + 1) % skip) != 0) {
         glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, v->curFbo);
@@ -2113,11 +2114,12 @@ static EGLBoolean my_eglSwapBuffers(EGLDisplay dpy, EGLSurface surf) {
                         if (nc.enabled != g_cfg.enabled || nc.interp_mode != g_cfg.interp_mode ||
                             nc.video_interp_mode != g_cfg.video_interp_mode ||
                             nc.strength != g_cfg.strength || nc.gen_interval != g_cfg.gen_interval ||
+                            nc.video_gen_interval != g_cfg.video_gen_interval ||
                             nc.me_quality != g_cfg.me_quality) {
-                            LOGI("配置热更新: enabled=%d 算法=%s 视频算法=%s strength=%d interval=%d me=%d",
+                            LOGI("配置热更新: enabled=%d 算法=%s 视频算法=%s strength=%d 游戏间隔=%d 视频间隔=%d me=%d",
                                  nc.enabled, mcfi_algo_name(nc.interp_mode),
                                  mcfi_algo_name(nc.video_interp_mode),
-                                 nc.strength, nc.gen_interval, nc.me_quality);
+                                 nc.strength, nc.gen_interval, nc.video_gen_interval, nc.me_quality);
                         }
                         g_cfg = nc;
                     }

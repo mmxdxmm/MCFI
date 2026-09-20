@@ -34,7 +34,8 @@ struct McfiConfig {
     int  video_interp_mode = 1;    // 视频模式插帧算法（独立于游戏）：0=MCI 1=普通混合（默认，视频噪声/直播下最稳）2=运动自适应混合
     int  strength = 60;            // MCI 遮挡/拖影抑制强度 0~100
     int  smooth = 60;             // 平滑强度 0~100（合成端静止保护 + 运动估计端时域收缩）
-    int  gen_interval = 1;         // 每 N 个真实帧插入 1 个生成帧
+    int  gen_interval = 1;         // 游戏插帧间隔：每 N 个真实帧插入 1 个生成帧（GLES/Vulkan 游戏模式）
+    int  video_gen_interval = 1;   // 视频插帧间隔：视频模式每 N 个真实帧插入 1 个生成帧
     int  me_quality = 60;          // 运动估计质量/开销 0~100（决定搜索半径与细化级数）
     int  panel_port = 4400;        // 控制面板端口（被占用自动顺延）
     int  log_level = 0;            // 0=关闭（默认，logcat 仅保留 ERROR）1=普通（INFO 全开）
@@ -145,6 +146,7 @@ public:
             else if (k == "strength")      c.strength = atoi(v.c_str());
             else if (k == "smooth")        c.smooth = atoi(v.c_str());
             else if (k == "gen_interval")  c.gen_interval = atoi(v.c_str());
+            else if (k == "video_gen_interval") c.video_gen_interval = atoi(v.c_str());
             else if (k == "me_quality")    c.me_quality = atoi(v.c_str());
             else if (k == "panel_port")    c.panel_port = atoi(v.c_str());
             else if (k == "log_level")     c.log_level = atoi(v.c_str());
@@ -159,6 +161,7 @@ public:
         if (c.smooth < 0) c.smooth = 0;
         if (c.smooth > 100) c.smooth = 100;
         if (c.gen_interval < 1) c.gen_interval = 1;
+        if (c.video_gen_interval < 1) c.video_gen_interval = 1;
         if (c.me_quality < 0) c.me_quality = 0;
         if (c.me_quality > 100) c.me_quality = 100;
         if (c.interp_mode < 0 || c.interp_mode > 2) c.interp_mode = 0;
@@ -184,6 +187,7 @@ public:
                  "strength=%d\n"
                  "smooth=%d\n"
                  "gen_interval=%d\n"
+                 "video_gen_interval=%d\n"
                  "me_quality=%d\n"
                  "panel_port=%d\n"
                  "log_level=%d\n"
@@ -193,8 +197,8 @@ public:
                  "me_mv16=%d\n"
                  "vsync_hz=%d\n",
                  enabled ? 1 : 0, target_mode, targets.c_str(), interp_mode, video_interp_mode,
-                 strength, smooth, gen_interval, me_quality, panel_port, log_level, vk_mci,
-                 pts_align_gles, pts_align_vk, me_mv16, vsync_hz);
+                 strength, smooth, gen_interval, video_gen_interval, me_quality, panel_port,
+                 log_level, vk_mci, pts_align_gles, pts_align_vk, me_mv16, vsync_hz);
         return buf;
     }
 };

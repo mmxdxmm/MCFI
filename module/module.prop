@@ -1,6 +1,6 @@
 id=mcfi
 name=MCFI 补帧模块
-version=v2.6.12
-versionCode=272
+version=v2.6.13
+versionCode=273
 author=MCFI Team
-description=v2.6.12：修复 Vulkan 帧相邻性——每帧拷贝当前帧（观察期/gen_interval 跳帧帧同样拷贝），prev/cur 严格相邻，仅熔断停插。
+description=v2.6.13：插帧间隔拆分为游戏插帧间隔（gen_interval）与视频插帧间隔（video_gen_interval），双模式独立控制。
